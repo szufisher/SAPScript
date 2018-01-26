@@ -1,0 +1,290 @@
+   Excel template layout
+   Vendor	9200003		PurchaseGroup	ACR		Currency	CNY
+   AAC	Plant	Description	Material Group	Quantity	UOM	Price	PriceBase	RequestDeliveryDate	GLAccount	TaxCode	Recipient	UnloadingPoint	CostCenter	Order	WBS	Asset No
+    K	0001	NRE cost for Sample	NLA	7	PC	2872.56	100	12/20/2017	xxxx	J1	xxx	xxxx	101
+
+Here the VBA code
+   
+   Global SapGuiAuto As Object
+   Global Connection As Object
+   Global session As Object
+   Public Declare Function FindWindow Lib "user32" Alias "FindWindowA" (ByVal lpClassName As String, ByVal lpWindowName As String) As Long
+   Public Declare Function SetForegroundWindow Lib "user32" (ByVal hWnd As Long) As Long
+   
+Sub ME21N_create_po()
+   
+    Dim screen_no As String
+    
+    Set SapGuiAuto = GetObject("SAPGUI")  'Get the SAP GUI Scripting object
+    Set SAPApp = SapGuiAuto.GetScriptingEngine 'Get the currently running SAP GUI
+    Set SAPCon = SAPApp.Children(0) 'Get the first system that is currently connected
+    Set session = SAPCon.Children(0) 'Get the first session (window) on that connection
+    screen_no = "0020"  ' when header, item, item detail unfolded, 0200, when header folded, item and detail unfolded, 0019, header foled, item unfoled, detail folded, screen 0016
+            
+    ' Check we have data.
+    Ct = 0         ' current counter
+    item_count = 0
+    cost_item_count = 0
+    last_po = ""
+    last_po_item = ""
+    
+    curr = Trim(CStr(Cells(1, 7).Value))
+    vendor = Trim(CStr(Cells(1, 2).Value))
+    purchase_group = Trim(CStr(Cells(1, 5).Value))
+    
+    If vendor = "" Then
+       MsgBox "please specify vendor for the PO in B1 cell!"
+       Exit Sub
+    End If
+    session.findById("wnd[0]").maximize
+    session.findById("wnd[0]/tbar[0]/okcd").Text = "/nme21n"
+    session.findById("wnd[0]").sendVKey 0
+    On Error Resume Next   'if header section is initially folded, press the expand button to set the correct layout
+        session.findById ("wnd[0]/usr/subSUB0:SAPLMEGUI:0016/subSUB1:SAPLMEVIEWS:1100/subSUB1:SAPLMEVIEWS:4000/btnDYN_4000-BUTTON")
+    If Err.Number = 0 Then
+        session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:0016/subSUB1:SAPLMEVIEWS:1100/subSUB1:SAPLMEVIEWS:4000/btnDYN_4000-BUTTON").press
+    End If
+    session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:0013/subSUB0:SAPLMEGUI:0030/subSUB1:SAPLMEGUI:1105/cmbMEPO_TOPLINE-BSART").Key = "ZDB"   'order type
+    session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:0013/subSUB0:SAPLMEGUI:0030/subSUB1:SAPLMEGUI:1105/ctxtMEPO_TOPLINE-SUPERFIELD").Text = vendor '"9300297"
+    'If po_date <> "" Then
+    '    session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:0013/subSUB0:SAPLMEGUI:0030/subSUB1:SAPLMEGUI:1105/ctxtMEPO_TOPLINE-BEDAT").Text = po_date '"23.12.2015"
+    'End If
+    session.findById("wnd[0]").sendVKey 0  'press ENTER to make the purchase group field ready for input
+    session.findById("wnd[0]").sendVKey 0  'press ENTER to make the purchase group field ready for input
+    ' purchase org and company should be default, purchase group to be set
+    On Error Resume Next
+       session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:0013/subSUB1:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1102/tabsHEADER_DETAIL/tabpTABHDT9/ssubTABSTRIPCONTROL2SUB:SAPLMEGUI:1222/cmbMEPO1222-EKGRP").Key = purchase_group '"ACR"
+    If Err.Number <> 0 Then
+        session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:0013/subSUB1:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1102/tabsHEADER_DETAIL/tabpTABHDT9/ssubTABSTRIPCONTROL2SUB:SAPLMEGUI:1221/ctxtMEPO1222-EKGRP").Text = purchase_group '"ac0"
+    End If
+    If curr <> "" Then
+        session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:0013/subSUB1:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1102/tabsHEADER_DETAIL/tabpTABHDT1").Select
+        session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:0013/subSUB1:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1102/tabsHEADER_DETAIL/tabpTABHDT1/ssubTABSTRIPCONTROL2SUB:SAPLMEGUI:1226/ctxtMEPO1226-WAERS").Text = curr '"eur"
+    End If
+    'session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:0013/subSUB1:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1102/tabsHEADER_DETAIL/tabpTABHDT5").Select
+    'session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:0013/subSUB1:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1102/tabsHEADER_DETAIL/tabpTABHDT5/ssubTABSTRIPCONTROL2SUB:SAPLMEGUI:1225/txtMEPOCOMM-IHREZ").Text = po ' store PA in your reference field
+    'session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:0013/subSUB1:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1102/tabsHEADER_DETAIL/tabpTABHDT5/ssubTABSTRIPCONTROL2SUB:SAPLMEGUI:1225/txtMEPOCOMM-UNSEZ").Text = PO '"id006"
+    
+    session.findById("wnd[0]").sendVKey 0
+    If session.findById("wnd[0]/sbar").MessageType = "E" Then
+        MsgBox "Error with message: " & session.findById("wnd[0]/sbar").Text
+        Exit Sub
+    End If
+    
+    For i = 3 To ActiveSheet.UsedRange.Rows.Count
+        po_item = CStr(i)
+        'vendor = Trim(CStr(Cells(i, 1).Value))
+        'purchase_group = UCase(Trim(CStr(Cells(i, 2).Value)))
+        'material = Trim(CStr(Cells(i, 3).Value))
+        aac = Trim(CStr(Cells(i, 1).Value))
+        plant = Cells(i, 2).Value
+        mat_desc = Trim(CStr(Cells(i, 3).Value))  'description is key word which will cause write read-only property error!!!
+        mat_desc = Left(mat_desc, 40)  'character length limit is 40
+        mat_desc = Replace(Replace(mat_desc, Chr(13), ""), Chr(10), "")  'remove carriage return/line break in the string!!
+        material_group = Trim(CStr(Cells(i, 4).Value))
+        
+        quantity = Trim(CStr(Cells(i, 5).Value))
+        uom = Trim(CStr(Cells(i, 6).Value))
+        Price = Trim(CStr(Cells(i, 7).Value))
+        price_base = Trim(CStr(Cells(i, 8).Value))
+        'curr = Trim(CStr(Cells(i, 10).Value))
+        
+        del_date = Trim(CStr(Cells(i, 9).Value))
+        gl_account = Trim(CStr(Cells(i, 10).Value))
+        tax_code = Cells(i, 11).Value 'input parameter PO is 22nd column
+        recipient = Left(Trim(CStr(Cells(i, 12).Value)), 12) ' limit 12 characters
+        unloading_point = Trim(CStr(Cells(i, 13).Value))
+        cost_center = Cells(i, 14).Value
+        internal_order = Trim(CStr(Cells(i, 15).Value))
+        wbs = Trim(CStr(Cells(i, 16).Value))
+        asset = Trim(CStr(Cells(i, 17).Value))
+        percentage = 100
+       
+        If po_item <> last_po_item Then   ' new item
+            last_po_item = po_item
+            item_count = item_count + 1
+            cost_split_count = 1
+            row = 0
+        Else
+            cost_split_count = cost_split_count + 1
+            row = 1
+        End If
+        If cost_split_count = 1 Then
+            'screen_no = "0020"
+            If Ct = 0 Then
+                session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:0013/subSUB2:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1211/tblSAPLMEGUITC_1211/ctxtMEPO1211-KNTTP[2,0]").Text = aac '"k"
+                session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:0013/subSUB2:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1211/tblSAPLMEGUITC_1211/txtMEPO1211-TXZ01[5,0]").Text = mat_desc '"test"
+                session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:0013/subSUB2:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1211/tblSAPLMEGUITC_1211/txtMEPO1211-MENGE[6,0]").Text = quantity '"1400"
+                session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:0013/subSUB2:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1211/tblSAPLMEGUITC_1211/ctxtMEPO1211-MEINS[7,0]").Text = uom '"pc"
+                session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:0013/subSUB2:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1211/tblSAPLMEGUITC_1211/ctxtMEPO1211-EEIND[9,0]").Text = del_date '"090916"
+                session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:0013/subSUB2:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1211/tblSAPLMEGUITC_1211/txtMEPO1211-NETPR[10,0]").Text = Price '"150"
+                session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:0013/subSUB2:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1211/tblSAPLMEGUITC_1211/txtMEPO1211-PEINH[12,0]").Text = price_base '
+                session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:0013/subSUB2:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1211/tblSAPLMEGUITC_1211/ctxtMEPO1211-WGBEZ[14,0]").Text = material_group '"aba"
+                session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:0013/subSUB2:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1211/tblSAPLMEGUITC_1211/ctxtMEPO1211-NAME1[15,0]").Text = plant '"30r1"
+                session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:0013/subSUB2:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1211/tblSAPLMEGUITC_1211/txtMEPO1211-AFNAM[19,0]").Text = recipient '"yuxinyong1"
+                Ct = 1 ' next following items after the 1st one
+            Else
+                screen_no = detect_screen_no(screen_no, "wnd[0]/usr/subSUB0:SAPLMEGUI:", "/subSUB2:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1211/tblSAPLMEGUITC_1211/ctxtMEPO1211-KNTTP[2,1]")
+                session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:" & screen_no & "/subSUB2:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1211/tblSAPLMEGUITC_1211/ctxtMEPO1211-KNTTP[2,1]").Text = aac '"k"
+                session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:" & screen_no & "/subSUB2:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1211/tblSAPLMEGUITC_1211/txtMEPO1211-TXZ01[5,1]").Text = mat_desc '"test"
+                session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:" & screen_no & "/subSUB2:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1211/tblSAPLMEGUITC_1211/txtMEPO1211-MENGE[6,1]").Text = quantity '"1400"
+                session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:" & screen_no & "/subSUB2:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1211/tblSAPLMEGUITC_1211/ctxtMEPO1211-MEINS[7,1]").Text = uom '"pc"
+                session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:" & screen_no & "/subSUB2:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1211/tblSAPLMEGUITC_1211/ctxtMEPO1211-EEIND[9,1]").Text = del_date '"090916"
+                session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:" & screen_no & "/subSUB2:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1211/tblSAPLMEGUITC_1211/txtMEPO1211-NETPR[10,1]").Text = Price '"150"
+                session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:" & screen_no & "/subSUB2:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1211/tblSAPLMEGUITC_1211/txtMEPO1211-PEINH[12,1]").Text = price_base '
+                session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:" & screen_no & "/subSUB2:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1211/tblSAPLMEGUITC_1211/ctxtMEPO1211-WGBEZ[14,1]").Text = material_group '"aba"
+                session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:" & screen_no & "/subSUB2:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1211/tblSAPLMEGUITC_1211/ctxtMEPO1211-NAME1[15,1]").Text = plant '"30r1"
+                session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:" & screen_no & "/subSUB2:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1211/tblSAPLMEGUITC_1211/txtMEPO1211-AFNAM[19,1]").Text = recipient '"yuxinyong1"
+
+            End If
+            session.findById("wnd[0]").sendVKey 0
+        End If
+        
+        'hanlde cost split case:account multiple button
+        If UCase(aac) = "K" And percentage <> "100" Then   ' cost split case
+            session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:0010/subSUB3:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1301/subSUB2:SAPLMEGUI:1303/tabsITEM_DETAIL/tabpTABIDT12").Select
+            screen_no = detect_screen_no(screen_no, "wnd[0]/usr/subSUB0:SAPLMEGUI:", "/subSUB3:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1301/subSUB2:SAPLMEGUI:1303/tabsITEM_DETAIL/tabpTABIDT12/ssubTABSTRIPCONTROL1SUB:SAPLMEVIEWS:1101/subSUB1:SAPLMEACCTVI:1200/cntlMEACCT1200TB/shellcont/shell")
+            If row = 0 Then  'start of cost split when new item with cost split
+                session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:" & screen_no & "/subSUB3:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1301/subSUB2:SAPLMEGUI:1303/tabsITEM_DETAIL/tabpTABIDT12/ssubTABSTRIPCONTROL1SUB:SAPLMEVIEWS:1101/subSUB1:SAPLMEACCTVI:1200/cntlMEACCT1200TB/shellcont/shell").pressButton "MEAC1200DETAILTOGGLE"
+                session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:" & screen_no & "/subSUB3:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1301/subSUB2:SAPLMEGUI:1303/tabsITEM_DETAIL/tabpTABIDT12/ssubTABSTRIPCONTROL1SUB:SAPLMEVIEWS:1101/subSUB1:SAPLMEACCTVI:1200/cmbMEACCT1200-VRTKZ").Key = "2"
+                session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:" & screen_no & "/subSUB3:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1301/subSUB2:SAPLMEGUI:1303/tabsITEM_DETAIL/tabpTABIDT12/ssubTABSTRIPCONTROL1SUB:SAPLMEVIEWS:1101/subSUB1:SAPLMEACCTVI:1200/cmbMEACCT1200-TWRKZ").Key = "2"
+                session.findById("wnd[0]").sendVKey 0
+                first_percentage = percentage
+            End If
+            session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:" & screen_no & "/subSUB3:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1301/subSUB2:SAPLMEGUI:1303/tabsITEM_DETAIL/tabpTABIDT12/ssubTABSTRIPCONTROL1SUB:SAPLMEVIEWS:1101/subSUB2:SAPLMEACCTVI:0100/subSUB1:SAPLMEACCTVI:1000/tblSAPLMEACCTVIDYN_1000TC/txtMEACCT1000-VPROZ[3," & CStr(row) & "]").Text = percentage '"25"
+            session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:" & screen_no & "/subSUB3:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1301/subSUB2:SAPLMEGUI:1303/tabsITEM_DETAIL/tabpTABIDT12/ssubTABSTRIPCONTROL1SUB:SAPLMEVIEWS:1101/subSUB2:SAPLMEACCTVI:0100/subSUB1:SAPLMEACCTVI:1000/tblSAPLMEACCTVIDYN_1000TC/ctxtMEACCT1000-KOSTL[4," & CStr(row) & "]").Text = cost_center ' "830301"
+            session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:" & screen_no & "/subSUB3:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1301/subSUB2:SAPLMEGUI:1303/tabsITEM_DETAIL/tabpTABIDT12/ssubTABSTRIPCONTROL1SUB:SAPLMEVIEWS:1101/subSUB2:SAPLMEACCTVI:0100/subSUB1:SAPLMEACCTVI:1000/tblSAPLMEACCTVIDYN_1000TC/ctxtMEACCT1000-SAKTO[5," & CStr(row) & "]").Text = gl_account ' "69610000"
+            session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:" & screen_no & "/subSUB3:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1301/subSUB2:SAPLMEGUI:1303/tabsITEM_DETAIL/tabpTABIDT12/ssubTABSTRIPCONTROL1SUB:SAPLMEVIEWS:1101/subSUB2:SAPLMEACCTVI:0100/subSUB1:SAPLMEACCTVI:1000/tblSAPLMEACCTVIDYN_1000TC/txtMEACCT1000-WEMPF[8," & CStr(row) & "]").Text = recipient '"recipient"
+            session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:" & screen_no & "/subSUB3:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1301/subSUB2:SAPLMEGUI:1303/tabsITEM_DETAIL/tabpTABIDT12/ssubTABSTRIPCONTROL1SUB:SAPLMEVIEWS:1101/subSUB2:SAPLMEACCTVI:0100/subSUB1:SAPLMEACCTVI:1000/tblSAPLMEACCTVIDYN_1000TC/txtMEACCT1000-ABLAD[7," & CStr(row) & "]").Text = unloading_point 'unloading
+            Position = session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:" & screen_no & "/subSUB3:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1301/subSUB2:SAPLMEGUI:1303/tabsITEM_DETAIL/tabpTABIDT12/ssubTABSTRIPCONTROL1SUB:SAPLMEVIEWS:1101/subSUB2:SAPLMEACCTVI:0100/subSUB1:SAPLMEACCTVI:1000/tblSAPLMEACCTVIDYN_1000TC").verticalScrollbar.Position
+            If cost_split_count = 2 Then
+                'restore the first cost split which has been reset by system automatically
+                 session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:" & screen_no & "/subSUB3:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1301/subSUB2:SAPLMEGUI:1303/tabsITEM_DETAIL/tabpTABIDT12/ssubTABSTRIPCONTROL1SUB:SAPLMEVIEWS:1101/subSUB2:SAPLMEACCTVI:0100/subSUB1:SAPLMEACCTVI:1000/tblSAPLMEACCTVIDYN_1000TC").verticalScrollbar.Position = 0
+                 session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:" & screen_no & "/subSUB3:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1301/subSUB2:SAPLMEGUI:1303/tabsITEM_DETAIL/tabpTABIDT12/ssubTABSTRIPCONTROL1SUB:SAPLMEVIEWS:1101/subSUB2:SAPLMEACCTVI:0100/subSUB1:SAPLMEACCTVI:1000/tblSAPLMEACCTVIDYN_1000TC/txtMEACCT1000-VPROZ[3,0]").Text = first_percentage '"25"
+                 'session.findById("wnd[0]").sendVKey 0
+            End If
+            session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:" & screen_no & "/subSUB3:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1301/subSUB2:SAPLMEGUI:1303/tabsITEM_DETAIL/tabpTABIDT12/ssubTABSTRIPCONTROL1SUB:SAPLMEVIEWS:1101/subSUB2:SAPLMEACCTVI:0100/subSUB1:SAPLMEACCTVI:1000/tblSAPLMEACCTVIDYN_1000TC").verticalScrollbar.Position = Position + 1
+        'end of cost split case
+        Else
+            If UCase(aac) = "K" Or UCase(aac) = "F" Or UCase(aac) = "P" Or UCase(aac) = "A" Then
+                screen_no = detect_screen_no(screen_no, "wnd[0]/usr/subSUB0:SAPLMEGUI:", "/subSUB3:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1301/subSUB2:SAPLMEGUI:1303/tabsITEM_DETAIL/tabpTABIDT12/ssubTABSTRIPCONTROL1SUB:SAPLMEVIEWS:1101/subSUB2:SAPLMEACCTVI:0100/subSUB1:SAPLMEACCTVI:1100/txtMEACCT1100-ABLAD")
+                session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:0010/subSUB3:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1301/subSUB2:SAPLMEGUI:1303/tabsITEM_DETAIL/tabpTABIDT12").Select
+                session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:" & screen_no & "/subSUB3:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1301/subSUB2:SAPLMEGUI:1303/tabsITEM_DETAIL/tabpTABIDT12/ssubTABSTRIPCONTROL1SUB:SAPLMEVIEWS:1101/subSUB2:SAPLMEACCTVI:0100/subSUB1:SAPLMEACCTVI:1100/txtMEACCT1100-ABLAD").Text = unloading_point '"ssmr warehouse"
+                session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:" & screen_no & "/subSUB3:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1301/subSUB2:SAPLMEGUI:1303/tabsITEM_DETAIL/tabpTABIDT12/ssubTABSTRIPCONTROL1SUB:SAPLMEVIEWS:1101/subSUB2:SAPLMEACCTVI:0100/subSUB1:SAPLMEACCTVI:1100/txtMEACCT1100-WEMPF").Text = recipient '"yuxinyong"
+                If UCase(aac) <> "A" Then  'when aac = A, no GL account needed
+                    session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:" & screen_no & "/subSUB3:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1301/subSUB2:SAPLMEGUI:1303/tabsITEM_DETAIL/tabpTABIDT12/ssubTABSTRIPCONTROL1SUB:SAPLMEVIEWS:1101/subSUB2:SAPLMEACCTVI:0100/subSUB1:SAPLMEACCTVI:1100/ctxtMEACCT1100-SAKTO").Text = gl_account '"26390000"
+                End If
+                If UCase(aac) = "K" Then
+                    session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:" & screen_no & "/subSUB3:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1301/subSUB2:SAPLMEGUI:1303/tabsITEM_DETAIL/tabpTABIDT12/ssubTABSTRIPCONTROL1SUB:SAPLMEVIEWS:1101/subSUB2:SAPLMEACCTVI:0100/subSUB1:SAPLMEACCTVI:1100/subKONTBLOCK:SAPLKACB:1101/ctxtCOBL-KOSTL").Text = cost_center '"830702"
+                ElseIf UCase(aac) = "F" Then
+                    session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:" & screen_no & "/subSUB3:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1301/subSUB2:SAPLMEGUI:1303/tabsITEM_DETAIL/tabpTABIDT12/ssubTABSTRIPCONTROL1SUB:SAPLMEVIEWS:1101/subSUB2:SAPLMEACCTVI:0100/subSUB1:SAPLMEACCTVI:1100/subKONTBLOCK:SAPLKACB:1101/ctxtCOBL-AUFNR").Text = internal_order '"830702"
+                ElseIf UCase(aac) = "P" Then
+                    session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:" & screen_no & "/subSUB3:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1301/subSUB2:SAPLMEGUI:1303/tabsITEM_DETAIL/tabpTABIDT12/ssubTABSTRIPCONTROL1SUB:SAPLMEVIEWS:1101/subSUB2:SAPLMEACCTVI:0100/subSUB1:SAPLMEACCTVI:1100/subKONTBLOCK:SAPLKACB:1101/ctxtCOBL-PS_POSID").Text = wbs '"830702"
+                ElseIf UCase(aac) = "A" Then
+                    session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:" & screen_no & "/subSUB3:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1301/subSUB2:SAPLMEGUI:1303/tabsITEM_DETAIL/tabpTABIDT12/ssubTABSTRIPCONTROL1SUB:SAPLMEVIEWS:1101/subSUB2:SAPLMEACCTVI:0100/subSUB1:SAPLMEACCTVI:1100/subKONTBLOCK:SAPLKACB:1101/ctxtCOBL-ANLN1").Text = asset  '"830702"
+                    session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:" & screen_no & "/subSUB3:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1301/subSUB2:SAPLMEGUI:1303/tabsITEM_DETAIL/tabpTABIDT12/ssubTABSTRIPCONTROL1SUB:SAPLMEVIEWS:1101/subSUB2:SAPLMEACCTVI:0100/subSUB1:SAPLMEACCTVI:1100/subKONTBLOCK:SAPLKACB:1101/ctxtCOBL-ANLN2").Text = "0" '"830702"
+                End If
+                session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:" & screen_no & "/subSUB3:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1301/subSUB2:SAPLMEGUI:1303/tabsITEM_DETAIL/tabpTABIDT12/ssubTABSTRIPCONTROL1SUB:SAPLMEVIEWS:1101/subSUB2:SAPLMEACCTVI:0100/subSUB1:SAPLMEACCTVI:1100/txtMEACCT1100-WEMPF").SetFocus
+                session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:" & screen_no & "/subSUB3:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1301/subSUB2:SAPLMEGUI:1303/tabsITEM_DETAIL/tabpTABIDT12/ssubTABSTRIPCONTROL1SUB:SAPLMEVIEWS:1101/subSUB2:SAPLMEACCTVI:0100/subSUB1:SAPLMEACCTVI:1100/txtMEACCT1100-WEMPF").caretPosition = 9
+                session.findById("wnd[0]").sendVKey 0
+                MessageType = session.findById("wnd[0]/sbar").MessageType
+                If MessageType = "W" Then
+                    session.findById("wnd[0]").sendVKey 0
+                End If
+            End If
+        End If
+        If cost_split_count = 1 And tax_code <> "" Then   'begin of the item , input the tax code
+            screen_no = detect_screen_no(screen_no, "wnd[0]/usr/subSUB0:SAPLMEGUI:", "/subSUB3:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1301/subSUB2:SAPLMEGUI:1303/tabsITEM_DETAIL/tabpTABIDT7")
+            session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:" & screen_no & "/subSUB3:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1301/subSUB2:SAPLMEGUI:1303/tabsITEM_DETAIL/tabpTABIDT7").Select
+            
+            screen_no = detect_screen_no(screen_no, "wnd[0]/usr/subSUB0:SAPLMEGUI:", "/subSUB3:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1301/subSUB2:SAPLMEGUI:1303/tabsITEM_DETAIL/tabpTABIDT7/ssubTABSTRIPCONTROL1SUB:SAPLMEGUI:1317/ctxtMEPO1317-MWSKZ")
+            session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:" & screen_no & "/subSUB3:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1301/subSUB2:SAPLMEGUI:1303/tabsITEM_DETAIL/tabpTABIDT7/ssubTABSTRIPCONTROL1SUB:SAPLMEGUI:1317/ctxtMEPO1317-MWSKZ").Text = tax_code '"j1"
+            session.findById("wnd[0]").sendVKey 0  ' ensure the follow switch of tab can be successful
+        End If
+        
+        last_cost_split_item = False
+        scroll_next = False
+        If UCase(aac) = "K" And percentage <> "100" Then  ' cost split
+            If Not rs.EOF Then
+                If Trim(CStr(rs(0).Value)) <> po_item Then   ' next item changed, this is the last cost split sub item
+                   last_cost_split_item = True
+                End If
+            Else
+               last_cost_split_item = True
+            End If
+            If last_cost_split_item = True Then
+                'restore the first cost split which has been reset by system automatically
+                'session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:0020/subSUB3:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1301/subSUB2:SAPLMEGUI:1303/tabsITEM_DETAIL/tabpTABIDT12/ssubTABSTRIPCONTROL1SUB:SAPLMEVIEWS:1101/subSUB2:SAPLMEACCTVI:0100/subSUB1:SAPLMEACCTVI:1000/tblSAPLMEACCTVIDYN_1000TC").verticalScrollbar.Position = 0
+                'session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:0020/subSUB3:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1301/subSUB2:SAPLMEGUI:1303/tabsITEM_DETAIL/tabpTABIDT12/ssubTABSTRIPCONTROL1SUB:SAPLMEVIEWS:1101/subSUB2:SAPLMEACCTVI:0100/subSUB1:SAPLMEACCTVI:1000/tblSAPLMEACCTVIDYN_1000TC/txtMEACCT1000-VPROZ[3,0]").Text = first_percentage '"25"
+                'session.findById("wnd[0]").sendVKey 0
+                scroll_next = True
+            End If
+        Else
+            scroll_next = True
+        End If
+        If scroll_next = True Then  'scroll the vertical bar to make the input row always stay at index 1, weird sometimes the screen number is 0019 instead of 0020
+            screen_no = detect_screen_no(screen_no, "wnd[0]/usr/subSUB0:SAPLMEGUI:", "/subSUB2:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1211/tblSAPLMEGUITC_1211")
+            session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:" & screen_no & "/subSUB2:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1211/tblSAPLMEGUITC_1211").verticalScrollbar.Position = Position + 1
+            Position = session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:" & screen_no & "/subSUB2:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1211/tblSAPLMEGUITC_1211").verticalScrollbar.Position
+        End If
+    Next i
+    'save the PO after all items input
+    session.findById("wnd[0]").sendVKey 0
+    'session.findById("wnd[0]/tbar[0]/btn[11]").press
+    On Error Resume Next   'popup window PO notify PO is subject to release
+        session.findById ("wnd[1]/tbar[0]/btn[0]")
+    If Err.Number = 0 Then
+        session.findById("wnd[1]/tbar[0]/btn[0]").press
+    End If
+    MessageType = session.findById("wnd[0]/sbar").MessageType
+    If MessageType = "W" Then
+        session.findById("wnd[0]").sendVKey 0
+    End If
+    'in case there is error in new PO, save (hold) the PO by press ENTER on the popup window
+    On Error Resume Next
+       session.findById ("wnd[1]/usr/btnSPOP-VAROPTION1")
+    If Err.Number = 0 Then
+        session.findById("wnd[1]/usr/btnSPOP-VAROPTION1").press
+    End If
+    result = session.findById("wnd[0]/sbar").Text
+    If InStr(result, "under the number") > 0 Then
+        po_strings = Split(result, " ")
+        sap_PO = po_strings(UBound(po_strings))  'PO for service created under the number 4700277146, the last item in the splitted array
+        result = result & " for po:" & po
+    Else
+        result = "failed creating new po"
+    End If
+    MsgBox "Process Completed with return message: " & session.findById("wnd[0]/sbar").Text
+End Sub
+
+Function detect_screen_no(screen_no As String, str1 As String, str2 As String) As String
+    On Error Resume Next
+        session.findById (str1 & screen_no & str2)
+    If Err.Number = 0 Then
+        detect_screen_no = screen_no
+    End If
+    For i = 20 To 10 Step -1
+        On Error Resume Next
+           session.findById (str1 & "00" & CStr(i) & str2)
+        If Err.Number = 0 Then
+            detect_screen_no = "00" & CStr(i)
+            Exit For
+        End If
+    Next i
+    'detect_screen_no = ""
+End Function
+
+Sub test_save_as()
+    hWnd = FindWindow(vbNullString, "Save As") 'what I am saving is a PDF file using a PDFCreator and the windows name is actually "Select destination" could be "Save As" too, the problem was same, script was waiting for my action
+    SetForegroundWindow (hWnd) 'puts save as as active window
+    SendKeys "%n" 'activates file name field
+    'Application.Wait (Now + TimeValue("00:00:01"))
+    SendKeys "12345678.pdf" 'enters path + name
+    'Application.Wait (Now + TimeValue("00:00:01"))
+    SendKeys "~" 'press enter
+    'Application.Wait (Now + TimeValue("00:00:01"))
+    hWnd = Null
+ '   AppActivate ("Save As") 'DOES not work
+ '   Application.SendKeys ("xyz.xls")
+'application.sendkeys ({Enter})
+End Sub
