@@ -1,0 +1,193 @@
+   Global session As Object
+   Global detected As Boolean
+   
+   
+Sub PO_PR_check()
+    Set SapGuiAuto = GetObject("SAPGUI")  'Get the SAP GUI Scripting object
+    Set SAPApp = SapGuiAuto.GetScriptingEngine 'Get the currently running SAP GUI
+    Set SAPCon = SAPApp.Children(0) 'Get the first system that is currently connected
+    Set session = SAPCon.Children(0) 'Get the first session (window) on that connection
+    Dim screen_no As String
+    
+    If SAPCon.Children.Count = 1 Then
+        session.findById("wnd[0]/tbar[0]/okcd").Text = "/os000"
+        session.findById("wnd[0]").sendVKey 0
+        Set session = SAPCon.Children(0)
+    End If
+
+    last_row = ActiveSheet.UsedRange.Rows.Count
+    If last_row > 2 Then
+        Range("A3:Z" + CStr(last_row)).Select
+        Selection.ClearContents
+    End If
+    Cells(3, 1).Select  'clear the selected area
+    cur_row = 2
+    screen_no = "0020"
+    detected = False
+
+    session.findById("wnd[0]/tbar[0]/okcd").Text = "/nme28"
+    session.findById("wnd[0]").sendVKey 0
+    'session.findById("wnd[0]/usr/ctxtP_FRGCO").Text = ""   'release code to be set, user parameter to be set
+    session.findById("wnd[0]/usr/chkP_FRGSE").Selected = True
+    session.findById("wnd[0]/usr/chkP_FRGRS").Selected = False
+    session.findById("wnd[0]/usr/chkP_FRGVO").Selected = True
+    session.findById("wnd[0]/usr/chkP_MITPOS").Selected = False
+    session.findById("wnd[0]/usr/ctxtLISTU").Text = "BEST"
+    session.findById("wnd[0]/usr/ctxtS_BSTYP-LOW").Text = "F"
+    session.findById("wnd[0]/usr/ctxtS_EKORG-LOW").Text = ""
+    session.findById("wnd[0]/usr/ctxtS_EBELN-LOW").Text = ""
+    session.findById("wnd[0]/usr/ctxtS_EBELN-HIGH").Text = ""
+    session.findById("wnd[0]/usr/ctxtS_BSART-LOW").Text = ""  'order type
+    session.findById("wnd[0]/usr/ctxtS_EKGRP-LOW").Text = ""
+    session.findById("wnd[0]/usr/ctxtS_EKGRP-HIGH").Text = ""
+    session.findById("wnd[0]/usr/ctxtS_LIFNR-LOW").Text = ""
+    session.findById("wnd[0]/usr/ctxtS_LIFNR-HIGH").Text = ""
+    session.findById("wnd[0]/usr/ctxtS_RESWK-LOW").Text = ""
+    session.findById("wnd[0]/usr/ctxtS_BEDAT-LOW").Text = ""
+    session.findById("wnd[0]/usr/ctxtS_BEDAT-HIGH").Text = ""
+    session.findById("wnd[0]/tbar[1]/btn[8]").press
+    For k = 3 To 150 Step 2
+        On Error Resume Next
+            session.findById ("wnd[0]/usr/lbl[1," & CStr(k) & "]")   '[1,3], [1,5],[1,7]
+        If Err.Number <> 0 Then
+           Exit For
+        End If
+        po = session.findById("wnd[0]/usr/lbl[1," & CStr(k) & "]").Text
+        Set session = SAPCon.Children(1)
+        session.findById("wnd[0]").resizeWorkingPane 225, 47, False
+        session.findById("wnd[0]/tbar[0]/okcd").Text = "/nme2n"
+        session.findById("wnd[0]").sendVKey 0
+        session.findById("wnd[0]/usr/ctxtEN_EBELN-LOW").Text = po
+        session.findById("wnd[0]/usr/ctxtLISTU").Text = "BEST_ALV"
+        session.findById("wnd[0]/usr/ctxtS_BSART-LOW").Text = ""
+        session.findById("wnd[0]/usr/ctxtS_BSART-HIGH").Text = ""
+        session.findById("wnd[0]/usr/ctxtS_EKGRP-LOW").Text = ""
+        session.findById("wnd[0]/usr/ctxtS_EKGRP-HIGH").Text = ""
+        session.findById("wnd[0]/usr/ctxtS_WERKS-LOW").Text = ""
+        session.findById("wnd[0]/usr/ctxtS_EINDT-LOW").Text = ""
+        session.findById("wnd[0]/usr/ctxtS_EINDT-HIGH").Text = ""
+        session.findById("wnd[0]/usr/ctxtS_LIFNR-LOW").Text = ""
+        session.findById("wnd[0]/usr/ctxtS_LIFNR-HIGH").Text = ""
+        session.findById("wnd[0]/usr/ctxtS_MATNR-LOW").Text = ""
+        session.findById("wnd[0]/usr/ctxtS_MATNR-HIGH").Text = ""
+        session.findById("wnd[0]/usr/ctxtS_RESWK-LOW").Text = ""
+        session.findById("wnd[0]/usr/ctxtS_RESWK-HIGH").Text = ""
+        session.findById("wnd[0]/usr/ctxtS_BEDAT-LOW").Text = ""
+        session.findById("wnd[0]/usr/ctxtS_BEDAT-HIGH").Text = ""
+        session.findById("wnd[0]/tbar[1]/btn[8]").press
+        session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell").selectedRows = "0"
+        session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell").doubleClickCurrentCell
+        session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:0019/subSUB1:SAPLMEVIEWS:1100/subSUB1:SAPLMEVIEWS:4000/btnDYN_4000-BUTTON").press 'click to unfold the header section
+        If detected = False Then
+            screen_no = detect_screen_no(screen_no, "wnd[0]/usr/subSUB0:SAPLMEGUI:", "/subSUB1:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1102/tabsHEADER_DETAIL/tabpTABHDT5")
+        End If
+        session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:" & screen_no & "/subSUB1:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1102/tabsHEADER_DETAIL/tabpTABHDT5").Select
+        pa = session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:" & screen_no & "/subSUB1:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1102/tabsHEADER_DETAIL/tabpTABHDT5/ssubTABSTRIPCONTROL2SUB:SAPLMEGUI:1225/txtMEPOCOMM-IHREZ").Text
+        session.findById("wnd[0]/tbar[0]/btn[3]").press  'BACK
+        
+        Set grid = session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell")
+                              
+        For i = 1 To grid.VisibleRowCount
+           Cells(i + cur_row, 1) = po
+           Cells(i + cur_row, 2) = pa
+           Cells(i + cur_row, 3) = grid.getcellvalue(i - 1, "WERKS")
+           Cells(i + cur_row, 4) = grid.getcellvalue(i - 1, "TXZ01")
+           Cells(i + cur_row, 5) = grid.getcellvalue(i - 1, "MATKL")
+           Cells(i + cur_row, 6) = grid.getcellvalue(i - 1, "MENGE")
+           Cells(i + cur_row, 7) = grid.getcellvalue(i - 1, "MEINS")
+           Cells(i + cur_row, 8) = grid.getcellvalue(i - 1, "NETPR")
+           Cells(i + cur_row, 9) = grid.getcellvalue(i - 1, "WAERS")
+           vendor = grid.getcellvalue(i - 1, "SUPERFIELD")
+           vendortext = Split(vendor, " ", 2)
+           Cells(i + cur_row, 10) = vendortext(0)
+           Cells(i + cur_row, 11) = LTrim(vendortext(1))
+        Next i
+        
+        Call get_data_from_database(pa, cur_row + 1)
+        
+        
+        check_result = True
+        For i = cur_row + 1 To grid.VisibleRowCount + cur_row
+           If Cells(i, 5) <> Cells(i, 15) Or Cells(i, 6) <> Cells(i, 16) _
+              Or Cells(i, 7) <> Cells(i, 17) Or Cells(i, 8) <> Cells(i, 18) Or Cells(i, 9) <> Cells(i, 19) Or Cells(i, 10) <> Cells(i, 20) Then
+             Cells(i, 12) = "failed"
+             check_result = False
+           Else
+             If Cells(i, 1) <> "" Then
+                Cells(i, 12) = "pass"
+             End If
+           End If
+        Next i
+        
+        cur_row = grid.VisibleRowCount + cur_row
+        
+        Set session = SAPCon.Children(0)
+        If check_result = True Then
+            session.findById("wnd[0]/usr/lbl[1," & CStr(k) & "]").SetFocus
+            session.findById("wnd[0]/tbar[1]/btn[5]").press  'RELEASE
+            release_save = True
+        End If
+    Next k
+    If release_save = True Then
+       session.findById("wnd[0]/tbar[0]/btn[11]").press  'SAVE
+    End If
+    MsgBox "Process Completed with return message: " & session.findById("wnd[0]/sbar").Text
+End Sub
+
+Sub get_data_from_database(po, cur_row)
+    Dim conn As ADODB.Connection
+    Dim rs As ADODB.Recordset
+    Dim sConnString As String
+
+    ' Create the connection string.
+    
+    sConnString = "Provider=SQLOLEDB;Data Source='x.x.x.x IP address';" & _
+                  "Initial Catalog='db_name';" & _
+                  "Integrated Security=SSPI;Trusted_connection=yes"                  
+    Set conn = New ADODB.Connection ' Create the Connection and Recordset objects.
+    Set rs = New ADODB.Recordset
+    conn.Open sConnString   ' Open the connection and execute.
+    Set rs = conn.Execute("select * from table_name where po = " & "'" & po & "'")
+    j = cur_row
+    po_item = ""   'initial value
+    Do While Not rs.EOF  ' Check we have data.
+        If po_item <> Trim(CStr(rs(0).Value)) Then
+            po_item = Trim(CStr(rs(0).Value))
+            Cells(j, 13) = rs(11).Value   'plant = rs(11).Value
+            
+            Material = Trim(CStr(rs(3).Value))
+            mat_desc = Trim(CStr(rs(4).Value))
+            If Material <> "" Then  'material number only as part of description, not real sap material number
+                mat_desc = Material + " " + mat_desc
+            End If
+            Cells(j, 14) = mat_desc   ' material description
+            Cells(j, 15) = Trim(CStr(rs(5).Value)) ' material_group = Trim(CStr(rs(5).Value))
+            Cells(j, 16) = Trim(CStr(rs(7).Value)) 'quantity = Trim(CStr(rs(7).Value))
+            Cells(j, 17) = Trim(CStr(rs(8).Value)) 'uom = Trim(CStr(rs(8).Value))
+            Cells(j, 18) = Replace(Trim(CStr(rs(9).Value)), ",", "") 'Price = Trim(CStr(rs(9).Value)) remove the thousand separator from DB
+            Cells(j, 19) = Trim(CStr(rs(10).Value)) ' curr = Trim(CStr(rs(10).Value))
+            Cells(j, 20) = Trim(CStr(rs(1).Value)) 'vendor = Trim(CStr(rs(1).Value))
+            j = j + 1
+        End If
+        rs.MoveNext
+    Loop
+End Sub
+
+Function detect_screen_no(screen_no As String, str1 As String, str2 As String) As String
+    On Error Resume Next
+        session.findById (str1 & screen_no & str2)
+    If Err.Number = 0 Then
+        detect_screen_no = screen_no
+        detected = True
+    End If
+    For i = 20 To 9 Step -1
+        On Error Resume Next
+           session.findById (str1 & "00" & CStr(i) & str2)
+        If Err.Number = 0 Then
+            detect_screen_no = "00" & CStr(i)
+            detected = True
+            Exit For
+        End If
+    Next i
+    'detect_screen_no = ""
+End Function
