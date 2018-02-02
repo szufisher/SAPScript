@@ -1,0 +1,210 @@
+How to use
+1 .Prepare the Excel template with input data in sheet2
+   sheet1, output of the execution result with following fields
+        prod order, item, materail , required quantity, actual posted qty, item status, document status
+    sheet2, the input of production orders with optional header text : Order, header_text
+
+2. set MIGO default value to propose Item OK 
+
+3. place cursor in sheet1 to make it the activesheet
+
+4. Run the macro, it will read the input data from the 2nd sheet, for each produciton order, it first pull allthe open items to be processed,
+then the Check button clicked, the popup window will be closed then, item by item check the error message, if deficit in error message
+it will jump to mateiral master to get the available unrestricted quantity, fill the migo quantity field, else uncheck item OK to bypass the 
+item, finally save the document and output the result to sheet1(the active sheet)
+
+Global SapGuiAuto As Object
+Global Connection As Object
+Global session As Object
+   
+Sub MIGO()
+    Set SapGuiAuto = GetObject("SAPGUI")  'Get the SAP GUI Scripting object
+    Set SAPApp = SapGuiAuto.GetScriptingEngine 'Get the currently running SAP GUI
+    Set SAPCon = SAPApp.Children(0) 'Get the first system that is currently connected
+    Set session = SAPCon.Children(0) 'Get the first session (window) on that connection
+    Dim screen_no As String
+    Dim k As Integer
+    
+    k = 1
+     screen_no = "0010"
+    'Application.ScreenUpdating = False  'to speed up the processing by disable constant update of the screen
+    ActiveSheet.Range("A2:H" & CStr(ActiveSheet.UsedRange.Rows.Count)).Clear   'clear the previous status
+
+    'prod_order = InputBox("Order", "Input Your production order", "21996501")
+    
+    For i = 2 To Sheets(2).UsedRange.Rows.Count
+        prod_order = Trim(CStr(Sheets(2).Cells(i, 1).Value))
+        header_text = Trim(CStr(Sheets(2).Cells(i, 2).Value))
+        If prod_order <> "" Then   ' new PO begin
+            session.findById("wnd[0]").maximize
+            'session.findById("wnd[0]").iconify
+            session.findById("wnd[0]/tbar[0]/okcd").Text = "/nmigo"
+            session.findById("wnd[0]").sendVKey 0
+            screen_no = detect_screen_no(screen_no, "wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:", "/subSUB_FIRSTLINE:SAPLMIGO:0010/cmbGODYNPRO-ACTION")
+            session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:" & screen_no & "/subSUB_FIRSTLINE:SAPLMIGO:0010/cmbGODYNPRO-ACTION").Key = "A07" 'goods issue
+            screen_no = detect_screen_no(screen_no, "wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:", "/subSUB_FIRSTLINE:SAPLMIGO:0010/cmbGODYNPRO-REFDOC")
+            session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:" & screen_no & "/subSUB_FIRSTLINE:SAPLMIGO:0010/cmbGODYNPRO-REFDOC").Key = "R08"  ' by order
+            session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:" & screen_no & "/subSUB_FIRSTLINE:SAPLMIGO:0010/subSUB_FIRSTLINE_REFDOC:SAPLMIGO:2070/ctxtGODYNPRO-ORDER_NUMBER").Text = prod_order '"21996501"
+            session.findById("wnd[0]").sendVKey 0
+            If session.findById("wnd[0]/sbar").MessageType = "E" Then
+                k = k + 1
+                Cells(k, 1) = prod_order
+                Cells(k, 7) = session.findById("wnd[0]/sbar").Text
+                GoTo ContinueNext_Order
+            End If
+            If session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:" & screen_no & "/subSUB_FIRSTLINE:SAPLMIGO:0010/ctxtGODEFAULT_TV-BWART").Text <> "261" Then
+                session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:" & screen_no & "/subSUB_FIRSTLINE:SAPLMIGO:0010/ctxtGODEFAULT_TV-BWART").Text = "261"    'movement type
+                On Error Resume Next                              'close the popup window
+                    session.findById ("wnd[1]")
+                If Err.Number = 0 Then
+                    session.findById("wnd[1]").Close
+                End If
+            End If
+            session.findById("wnd[0]").sendVKey 0
+            If header_text <> "" Then
+                session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:" & screen_no & "/subSUB_HEADER:SAPLMIGO:0101/subSUB_HEADER:SAPLMIGO:0100/tabsTS_GOHEAD/tabpOK_GOHEAD_GENERAL").Select
+                session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:" & screen_no & "/subSUB_HEADER:SAPLMIGO:0101/subSUB_HEADER:SAPLMIGO:0100/tabsTS_GOHEAD/tabpOK_GOHEAD_GENERAL/ssubSUB_TS_GOHEAD_GENERAL:SAPLMIGO:0110/txtGOHEAD-BKTXT").Text = header_text '"header text"
+                'session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:" & screen_no & "/subSUB_HEADER:SAPLMIGO:0101/subSUB_HEADER:SAPLMIGO:0100/tabsTS_GOHEAD/tabpOK_GOHEAD_GENERAL/ssubSUB_TS_GOHEAD_GENERAL:SAPLMIGO:0110/ctxtGOHEAD-BLDAT").text = "01.07.2017"
+                'session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:" & screen_no & "/subSUB_HEADER:SAPLMIGO:0101/subSUB_HEADER:SAPLMIGO:0100/tabsTS_GOHEAD/tabpOK_GOHEAD_GENERAL/ssubSUB_TS_GOHEAD_GENERAL:SAPLMIGO:0110/txtGOHEAD-LFSNR").text = "delivery note"
+                'session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:" & screen_no & "/subSUB_HEADER:SAPLMIGO:0101/subSUB_HEADER:SAPLMIGO:0100/tabsTS_GOHEAD/tabpOK_GOHEAD_GENERAL/ssubSUB_TS_GOHEAD_GENERAL:SAPLMIGO:0110/ctxtGOHEAD-BUDAT").text = "02.08.2017"
+                'session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:" & screen_no & "/subSUB_HEADER:SAPLMIGO:0101/subSUB_HEADER:SAPLMIGO:0100/tabsTS_GOHEAD/tabpOK_GOHEAD_GENERAL/ssubSUB_TS_GOHEAD_GENERAL:SAPLMIGO:0110/txtGOHEAD-FRBNR").text = "bill of lading"
+                'session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:" & screen_no & "/subSUB_HEADER:SAPLMIGO:0101/subSUB_HEADER:SAPLMIGO:0100/tabsTS_GOHEAD/tabpOK_GOHEAD_GENERAL/ssubSUB_TS_GOHEAD_GENERAL:SAPLMIGO:0110/txtGOHEAD-XABLN").text = "slipno"
+            End If
+        End If
+        
+        total_items = session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:" & screen_no & "/subSUB_ITEMLIST:SAPLMIGO:0200/tblSAPLMIGOTV_GOITEM").VerticalScrollbar.Maximum + 1  '
+        If total_items = 0 Then
+            total_items = 1
+        End If
+        PageSize = session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:" & screen_no & "/subSUB_ITEMLIST:SAPLMIGO:0200/tblSAPLMIGOTV_GOITEM").VerticalScrollbar.PageSize
+        
+        session.findById("wnd[0]/tbar[1]/btn[7]").press   ' the check button to trigger the system message , info, warning, error
+        On Error Resume Next                              'close the popup window now, as we will handle the error message item by item
+            session.findById ("wnd[1]")
+        If Err.Number = 0 Then
+            session.findById("wnd[1]").Close
+        End If
+        actual_qty = 0
+        
+        For j = 1 To total_items
+            qty = ""
+            material = ""
+            actual_qty = ""
+            pageindex = j Mod PageSize
+            If pageindex = 1 Then
+                If j > 1 Then
+                    session.findById("wnd[0]/tbar[0]/btn[82]").press   ' click the next page button
+                End If
+                CurrentRow = 0
+            Else
+                CurrentRow = CurrentRow + 1
+            End If
+            'the default setting should already set Item OK
+            session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:" & screen_no & "/subSUB_ITEMLIST:SAPLMIGO:0200/tblSAPLMIGOTV_GOITEM/btnGOITEM-ZEILE[0," & CStr(CurrentRow) & "]").SetFocus
+            session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:" & screen_no & "/subSUB_ITEMLIST:SAPLMIGO:0200/tblSAPLMIGOTV_GOITEM/btnGOITEM-ZEILE[0," & CStr(CurrentRow) & "]").press   'click the line item button to activate the detail sub screen
+            session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:" & screen_no & "/subSUB_ITEMDETAIL:SAPLMIGO:0301/subSUB_DETAIL:SAPLMIGO:0300/tabsTS_GOITEM/tabpOK_GOITEM_QUANTITIES").Select  'switch to quantity tab page
+            qty = session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:" & screen_no & "/subSUB_ITEMDETAIL:SAPLMIGO:0301/subSUB_DETAIL:SAPLMIGO:0300/tabsTS_GOITEM/tabpOK_GOITEM_QUANTITIES/ssubSUB_TS_GOITEM_QUANTITIES:SAPLMIGO:0315/txtGOITEM-ERFMG").Text
+            session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:" & screen_no & "/subSUB_ITEMDETAIL:SAPLMIGO:0301/subSUB_DETAIL:SAPLMIGO:0300/tabsTS_GOITEM/tabpOK_GOITEM_MATERIAL").Select ' switch to material tab page
+            material = session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:" & screen_no & "/subSUB_ITEMDETAIL:SAPLMIGO:0301/subSUB_DETAIL:SAPLMIGO:0300/tabsTS_GOITEM/tabpOK_GOITEM_MATERIAL/ssubSUB_TS_GOITEM_MATERIAL:SAPLMIGO:0310/ctxtGOITEM-MATNR").Text
+            If Trim(qty) <> "" Then  ' handle the case the already delivery completed item proposed by system per user default setting, under this case, bypass this item
+                'handle error message
+                session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:" & screen_no & "/subSUB_ITEMLIST:SAPLMIGO:0200/tblSAPLMIGOTV_GOITEM/btnGOITEM-LOGLEVEL[1," & CStr(CurrentRow) & "]").SetFocus
+                session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:" & screen_no & "/subSUB_ITEMLIST:SAPLMIGO:0200/tblSAPLMIGOTV_GOITEM/btnGOITEM-LOGLEVEL[1," & CStr(CurrentRow) & "]").press   'click the item message button
+                On Error Resume Next
+                    session.findById ("wnd[1]/usr/lbl[1,3]")
+                If Err.Number = 0 Then   ' there is at least warning or error message
+                    session.findById("wnd[1]/tbar[0]/btn[18]").press   'hide info message
+                    session.findById("wnd[1]/tbar[0]/btn[19]").press   'hide warning message
+                    On Error Resume Next
+                         session.findById ("wnd[1]/usr/lbl[5,3]")
+                    If Err.Number = 0 Then
+                        error_message = session.findById("wnd[1]/usr/lbl[10,3]").Text
+                        session.findById("wnd[1]").Close
+                        'reposition to the current row
+                        session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:" & screen_no & "/subSUB_ITEMLIST:SAPLMIGO:0200/tblSAPLMIGOTV_GOITEM/btnGOITEM-ZEILE[0," & CStr(CurrentRow) & "]").SetFocus
+                        session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:" & screen_no & "/subSUB_ITEMLIST:SAPLMIGO:0200/tblSAPLMIGOTV_GOITEM/btnGOITEM-ZEILE[0," & CStr(CurrentRow) & "]").press   'click the line item button to activate the detail sub screen
+                        If InStr(error_message, "Deficit") > 0 Then   'no enough stock case
+                            session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:" & screen_no & "/subSUB_ITEMDETAIL:SAPLMIGO:0301/subSUB_DETAIL:SAPLMIGO:0300/tabsTS_GOITEM/tabpOK_GOITEM_MATERIAL").Select ' switch to material tab page
+                            material = session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:" & screen_no & "/subSUB_ITEMDETAIL:SAPLMIGO:0301/subSUB_DETAIL:SAPLMIGO:0300/tabsTS_GOITEM/tabpOK_GOITEM_MATERIAL/ssubSUB_TS_GOITEM_MATERIAL:SAPLMIGO:0310/ctxtGOITEM-MATNR").Text
+                            session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:" & screen_no & "/subSUB_ITEMDETAIL:SAPLMIGO:0301/subSUB_DETAIL:SAPLMIGO:0300/tabsTS_GOITEM/tabpOK_GOITEM_MATERIAL/ssubSUB_TS_GOITEM_MATERIAL:SAPLMIGO:0310/ctxtGOITEM-MATNR").SetFocus
+                            session.findById("wnd[0]").sendVKey 2   'double click to jump to material master
+                            session.findById("wnd[0]/usr/tabsTABSPR1/tabpSP29").Select   'click the storage location stock tab page
+                            actual_qty = session.findById("wnd[0]/usr/tabsTABSPR1/tabpSP29/ssubTABFRA1:SAPLMGMM:2000/subSUB3:SAPLMGD1:3002/txtMARD-LABST").Text  'get the storage locations unrestricted quantity
+                            session.findById("wnd[0]/tbar[0]/btn[3]").press  'BACK from MM03 to MIGO
+                            If actual_qty <> "0.000" Then
+                                session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:" & screen_no & "/subSUB_ITEMDETAIL:SAPLMIGO:0301/subSUB_DETAIL:SAPLMIGO:0300/tabsTS_GOITEM/tabpOK_GOITEM_QUANTITIES").Select  'switch to quantity tab page
+                                session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:" & screen_no & "/subSUB_ITEMDETAIL:SAPLMIGO:0301/subSUB_DETAIL:SAPLMIGO:0300/tabsTS_GOITEM/tabpOK_GOITEM_QUANTITIES/ssubSUB_TS_GOITEM_QUANTITIES:SAPLMIGO:0315/txtGOITEM-ERFMG").Text = actual_qty
+                            Else
+                                session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:" & screen_no & "/subSUB_ITEMDETAIL:SAPLMIGO:0301/subSUB_DETAIL:SAPLMIGO:0300/subSUB_DETAIL_TAKE:SAPLMIGO:0304/chkGODYNPRO-DETAIL_TAKE").Selected = False  'item OK
+                                error_message = "No stock available for GI"
+                            End If
+                        Else
+                            actual_qty = 0
+                            session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:" & screen_no & "/subSUB_ITEMDETAIL:SAPLMIGO:0301/subSUB_DETAIL:SAPLMIGO:0300/subSUB_DETAIL_TAKE:SAPLMIGO:0304/chkGODYNPRO-DETAIL_TAKE").Selected = False  'item OK
+                        End If
+                    Else
+                        actual_qty = 0
+                        error_message = "unexpected warning message in popup window"
+                    End If
+                Else ' item is OK with green status, no popup window
+                    actual_qty = qty
+                    error_message = "Item processed OK"
+                End If
+                k = k + 1
+                Cells(k, 1) = prod_order
+                Cells(k, 2) = j
+                Cells(k, 3) = material
+                Cells(k, 4) = qty    ' required quantity
+                Cells(k, 5) = actual_qty    'issued quantity
+                Cells(k, 6) = error_message
+                
+            End If ' if qty <> ""
+        Next j
+        session.findById("wnd[0]/tbar[0]/btn[11]").press   'save
+        MessageType = session.findById("wnd[0]/sbar").MessageType
+        If MessageType = "W" Then
+            session.findById("wnd[0]").sendVKey 0
+        End If
+        On Error Resume Next   'get the popup error message window content which only triggerred when SAVE or Check the whole document
+           session.findById ("wnd[1]/tbar[0]/btn[0]")
+        If Err.Number = 0 Then
+           session.findById("wnd[1]/tbar[0]/btn[18]").press   'hide info message
+           session.findById("wnd[1]/tbar[0]/btn[19]").press   'hide warning message
+           On Error Resume Next
+                session.findById ("wnd[1]/usr/lbl[5,3]")
+           If Err.Number = 0 Then
+               error_result = "item:" + session.findById("wnd[1]/usr/lbl[5,3]").Text + " with error: " + session.findById("wnd[1]/usr/lbl[10,3]").Text
+           End If
+           session.findById("wnd[1]/tbar[0]/btn[0]").press
+        End If
+        result = session.findById("wnd[0]/sbar").Text
+        
+        If InStr(result, "Material document ") > 0 Then  'Material document 5014695540 posted
+            status_strings = Split(result, " ")
+            material_document = status_strings(UBound(status_strings) - 1)
+            Cells(k, 7).Value = result
+        Else
+            Cells(k, 7).Value = "failed , reason:" & result + " " + error_result
+        End If
+ContinueNext_Order:
+    Next i
+    'Application.ScreenUpdating = True
+    MsgBox "Process Completed"
+End Sub
+
+Function detect_screen_no(screen_no As String, str1 As String, str2 As String) As String
+    On Error Resume Next
+        session.findById (str1 & screen_no & str2)
+    If Err.Number = 0 Then
+        detect_screen_no = screen_no
+    End If
+    For i = 10 To 1 Step -1
+        On Error Resume Next
+           session.findById (str1 & "000" & CStr(i) & str2)
+        If Err.Number = 0 Then
+            detect_screen_no = "000" & CStr(i)
+            Exit For
+        End If
+    Next i
+    'detect_screen_no = ""
+End Function
