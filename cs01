@@ -1,0 +1,81 @@
+create BOM 
+template file : component_status and BOM document status are output only
+plant is hardcoded, if needed to be placed in template file
+BOMKEY	Item Material_Number	Quantity			component status	BOM document status
+BOM             Parent1
+          1     component1
+          2     component2
+BOM             Parent2
+          1     component3
+          
+
+Sub MacroBOM()
+    Set SapGuiAuto = GetObject("SAPGUI")  'Get the SAP GUI Scripting object
+    Set SAPApp = SapGuiAuto.GetScriptingEngine 'Get the currently running SAP GUI
+    Set SAPCon = SAPApp.Children(0) 'Get the first system that is currently connected
+    Set session = SAPCon.Children(0) 'Get the first session (window) on that connection
+        
+    For i = 2 To ActiveSheet.UsedRange.Rows.Count 'create BOM
+        If (Cells(i, 1) = "BOM") Then
+            session.findById("wnd[0]/tbar[0]/okcd").Text = "/ncs01"
+            session.findById("wnd[0]").sendVKey 0
+            session.findById("wnd[0]/usr/ctxtRC29N-MATNR").Text = Trim(CStr(Cells(i, 3).Value))
+            session.findById("wnd[0]/usr/ctxtRC29N-WERKS").Text = "0001"
+            session.findById("wnd[0]/usr/ctxtRC29N-STLAN").Text = "1"
+            session.findById("wnd[0]").sendVKey 0
+            header_msg = session.findById("wnd[0]/sbar").Text
+            If header_msg = "" Then
+                header_msg = "header material OK"
+            End If
+            Cells(i, 8) = header_msg
+            BOM_is_valid = True
+            If session.findById("wnd[0]/sbar").MessageType = "E" Then
+                BOM_is_valid = False
+            End If
+        Else
+            If BOM_is_valid Then
+                 On Error Resume Next   'handle the case that previous component has unexpected error which can not be resolved by the script
+                     session.findById ("wnd[0]/usr/tabsTS_ITOV/tabpTCMA/ssubSUBPAGE:SAPLCSDI:0152/tblSAPLCSDITCMAT/ctxtRC29P-IDNRK[2,0]")
+                 If Err.Number <> 0 Then
+                        BOM_is_valid = False
+                         GoTo handle_error
+                 End If
+                 session.findById("wnd[0]/usr/tabsTS_ITOV/tabpTCMA/ssubSUBPAGE:SAPLCSDI:0152/tblSAPLCSDITCMAT/ctxtRC29P-IDNRK[2,0]").Text = Trim(CStr(Cells(i, 3).Value))
+                 session.findById("wnd[0]/usr/tabsTS_ITOV/tabpTCMA/ssubSUBPAGE:SAPLCSDI:0152/tblSAPLCSDITCMAT/txtRC29P-MENGE[4,0]").Text = Trim(CStr(Cells(i, 4).Value))
+                 session.findById("wnd[0]/usr/tabsTS_ITOV/tabpTCMA/ssubSUBPAGE:SAPLCSDI:0152/tblSAPLCSDITCMAT/ctxtRC29P-MEINS[5,0]").Text = "pc"
+                 session.findById("wnd[0]").sendVKey 0
+                 msg = ""
+                 For k = 1 To 10   'if warning press ENTER
+                      MessageType = session.findById("wnd[0]/sbar").MessageType
+                      msg = msg + " " + MessageType + " " + session.findById("wnd[0]/sbar").Text
+                      If MessageType = "W" Then
+                         session.findById("wnd[0]").sendVKey 0
+                      Else
+                         GoTo warning_processed_OK
+                      End If
+                 Next k
+warning_processed_OK:
+                 If Trim(msg) = "" Then
+                    msg = "Processed OK"
+                 End If
+                 Cells(i, 7) = msg
+                 vertialscrollbar = session.findById("wnd[0]/usr/tabsTS_ITOV/tabpTCMA/ssubSUBPAGE:SAPLCSDI:0152/tblSAPLCSDITCMAT").verticalScrollbar.Position
+                 If MessageType <> "E" Then
+                     session.findById("wnd[0]/usr/tabsTS_ITOV/tabpTCMA/ssubSUBPAGE:SAPLCSDI:0152/tblSAPLCSDITCMAT").verticalScrollbar.Position = vertialscrollbar + 1
+                 End If
+                If (Cells(i + 1, 2) = "") Then
+                    'session.findById("wnd[0]/tbar[0]/btn[11]").press
+                    If session.findById("wnd[0]/sbar").MessageType = "W" Then
+                         session.findById("wnd[0]").sendVKey 0
+                    End If
+                    Cells(i, 8) = session.findById("wnd[0]/sbar").Text
+                End If
+            
+            Else
+                Cells(i, 7) = "BOM head material or the previouse component is invalid"
+            End If
+        End If
+handle_error:
+    Next i
+     MsgBox "Process Completed"
+End Sub
