@@ -13,9 +13,10 @@ then the Check button clicked, the popup window will be closed then, item by ite
 it will jump to mateiral master to get the available unrestricted quantity, fill the migo quantity field, else uncheck item OK to bypass the 
 item, finally save the document and output the result to sheet1(the active sheet)
 
-  Global SapGuiAuto As Object
+    Global SapGuiAuto As Object
    Global Connection As Object
    Global session As Object
+   Global material_stock As Object
    
 Sub MIGO()
     Set SapGuiAuto = GetObject("SAPGUI")  'Get the SAP GUI Scripting object
@@ -24,11 +25,16 @@ Sub MIGO()
     Set session = SAPCon.Children(0) 'Get the first session (window) on that connection
     Dim screen_no As String
     Dim k As Integer
+    Dim material As String
+    Dim qty As Double
+    Dim actual_qty As Double
+    
+    Set material_stock = CreateObject("Scripting.Dictionary")
     
     k = 1
      screen_no = "0010"
     Application.ScreenUpdating = False  'to speed up the processing by disable constant update of the screen
-    ActiveSheet.Range("A2:G" & CStr(ActiveSheet.UsedRange.Rows.Count)).Clear   'clear the previous status
+    'ActiveSheet.Range("A2:G" & CStr(ActiveSheet.UsedRange.Rows.Count)).Clear   'clear the previous status
 
     'prod_order = InputBox("Order", "Input Your production order", "21996501")
     
@@ -89,7 +95,6 @@ Sub MIGO()
         actual_qty = 0
         
         For j = 1 To total_items
-            qty = ""
             material = ""
             actual_qty = 0
             pageindex = j Mod PageSize
@@ -105,10 +110,15 @@ Sub MIGO()
             session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:" & screen_no & "/subSUB_ITEMLIST:SAPLMIGO:0200/tblSAPLMIGOTV_GOITEM/btnGOITEM-ZEILE[0," & CStr(CurrentRow) & "]").SetFocus
             session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:" & screen_no & "/subSUB_ITEMLIST:SAPLMIGO:0200/tblSAPLMIGOTV_GOITEM/btnGOITEM-ZEILE[0," & CStr(CurrentRow) & "]").press   'click the line item button to activate the detail sub screen
             session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:" & screen_no & "/subSUB_ITEMDETAIL:SAPLMIGO:0301/subSUB_DETAIL:SAPLMIGO:0300/tabsTS_GOITEM/tabpOK_GOITEM_QUANTITIES").Select  'switch to quantity tab page
-            qty = session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:" & screen_no & "/subSUB_ITEMDETAIL:SAPLMIGO:0301/subSUB_DETAIL:SAPLMIGO:0300/tabsTS_GOITEM/tabpOK_GOITEM_QUANTITIES/ssubSUB_TS_GOITEM_QUANTITIES:SAPLMIGO:0315/txtGOITEM-ERFMG").Text
+            required_qty = session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:" & screen_no & "/subSUB_ITEMDETAIL:SAPLMIGO:0301/subSUB_DETAIL:SAPLMIGO:0300/tabsTS_GOITEM/tabpOK_GOITEM_QUANTITIES/ssubSUB_TS_GOITEM_QUANTITIES:SAPLMIGO:0315/txtGOITEM-ERFMG").Text
+            If Trim(required_qty) = "" Then
+                qty = 0
+            Else
+                qty = required_qty + 0
+            End If
             session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:" & screen_no & "/subSUB_ITEMDETAIL:SAPLMIGO:0301/subSUB_DETAIL:SAPLMIGO:0300/tabsTS_GOITEM/tabpOK_GOITEM_MATERIAL").Select ' switch to material tab page
             material = session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:" & screen_no & "/subSUB_ITEMDETAIL:SAPLMIGO:0301/subSUB_DETAIL:SAPLMIGO:0300/tabsTS_GOITEM/tabpOK_GOITEM_MATERIAL/ssubSUB_TS_GOITEM_MATERIAL:SAPLMIGO:0310/ctxtGOITEM-MATNR").Text
-            If Trim(qty) <> "" Then  ' handle the case the already delivery completed item proposed by system per user default setting, under this case, bypass this item
+            If qty > 0 Then  ' handle the case the already delivery completed item proposed by system per user default setting, under this case, bypass this item
                 'handle error message
                 session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:" & screen_no & "/subSUB_ITEMLIST:SAPLMIGO:0200/tblSAPLMIGOTV_GOITEM/btnGOITEM-LOGLEVEL[1," & CStr(CurrentRow) & "]").SetFocus
                 session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:" & screen_no & "/subSUB_ITEMLIST:SAPLMIGO:0200/tblSAPLMIGOTV_GOITEM/btnGOITEM-LOGLEVEL[1," & CStr(CurrentRow) & "]").press   'click the item message button
@@ -133,15 +143,24 @@ Sub MIGO()
                             session.findById("wnd[0]/usr/tabsTABSPR1/tabpSP29").Select   'click the storage location stock tab page
                             actual_qty = session.findById("wnd[0]/usr/tabsTABSPR1/tabpSP29/ssubTABFRA1:SAPLMGMM:2000/subSUB3:SAPLMGD1:3002/txtMARD-LABST").Text + 0  'get the storage locations unrestricted quantity +0 to force convert to number
                             session.findById("wnd[0]/tbar[0]/btn[3]").press  'BACK from MM03 to MIGO
-                            If actual_qty > 0 Then
-                                session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:" & screen_no & "/subSUB_ITEMDETAIL:SAPLMIGO:0301/subSUB_DETAIL:SAPLMIGO:0300/tabsTS_GOITEM/tabpOK_GOITEM_QUANTITIES").Select  'switch to quantity tab page
-                                session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:" & screen_no & "/subSUB_ITEMDETAIL:SAPLMIGO:0301/subSUB_DETAIL:SAPLMIGO:0300/tabsTS_GOITEM/tabpOK_GOITEM_QUANTITIES/ssubSUB_TS_GOITEM_QUANTITIES:SAPLMIGO:0315/txtGOITEM-ERFMG").Text = actual_qty
+                            consumed_qty = get_consumed_qty(material, qty)
+                            If actual_qty - consumed_qty > 0 Then
+                                If actual_qty - consumed_qty < qty Then
+                                    session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:" & screen_no & "/subSUB_ITEMDETAIL:SAPLMIGO:0301/subSUB_DETAIL:SAPLMIGO:0300/tabsTS_GOITEM/tabpOK_GOITEM_QUANTITIES").Select  'switch to quantity tab page
+                                    session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:" & screen_no & "/subSUB_ITEMDETAIL:SAPLMIGO:0301/subSUB_DETAIL:SAPLMIGO:0300/tabsTS_GOITEM/tabpOK_GOITEM_QUANTITIES/ssubSUB_TS_GOITEM_QUANTITIES:SAPLMIGO:0315/txtGOITEM-ERFMG").Text = actual_qty
+                                Else
+                                    actual_qty = qty
+                                '    session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:" & screen_no & "/subSUB_ITEMDETAIL:SAPLMIGO:0301/subSUB_DETAIL:SAPLMIGO:0300/subSUB_DETAIL_TAKE:SAPLMIGO:0304/chkGODYNPRO-DETAIL_TAKE").Selected = False  'item OK
+                                '    error_message = "same material in one order case, the previous component been processed, total available stock more than this item's required qty!"
+                                End If
                             Else
+                                actual_qty = 0
                                 session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:" & screen_no & "/subSUB_ITEMDETAIL:SAPLMIGO:0301/subSUB_DETAIL:SAPLMIGO:0300/subSUB_DETAIL_TAKE:SAPLMIGO:0304/chkGODYNPRO-DETAIL_TAKE").Selected = False  'item OK
                                 error_message = "No stock available for GI"
                             End If
-                        Else
+                        Else  'non deficit stock error, can not be handled by the script
                             actual_qty = 0
+                            error_message = "really unexpected error message in popup window"
                             session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:" & screen_no & "/subSUB_ITEMDETAIL:SAPLMIGO:0301/subSUB_DETAIL:SAPLMIGO:0300/subSUB_DETAIL_TAKE:SAPLMIGO:0304/chkGODYNPRO-DETAIL_TAKE").Selected = False  'item OK
                         End If
                     Else
@@ -150,6 +169,7 @@ Sub MIGO()
                     End If
                 Else ' item is OK with green status, no popup window
                     actual_qty = qty
+                    consumed_qty = get_consumed_qty(material, qty)
                     error_message = "Item processed OK"
                 End If
                 k = k + 1
@@ -159,10 +179,9 @@ Sub MIGO()
                 Cells(k, 4) = qty    ' required quantity
                 Cells(k, 5) = actual_qty    'issued quantity
                 Cells(k, 6) = error_message
-                
             End If ' if qty <> ""
         Next j
-       ' session.findById("wnd[0]/tbar[0]/btn[11]").press   'save
+        session.findById("wnd[0]/tbar[0]/btn[11]").press   'save
         MessageType = session.findById("wnd[0]/sbar").MessageType
         If MessageType = "W" Then
             session.findById("wnd[0]").sendVKey 0
@@ -189,7 +208,13 @@ Sub MIGO()
             Cells(k, 7).Value = "failed , reason:" & result + " " + error_result
         End If
 ContinueNext_Order:
+        material_stock.RemoveAll
     Next i
+    Set material_stock = Nil
+    Set session = Nil
+    Set Connection = Nil
+    Set SapGuiAuto = Nil
+   
     Application.ScreenUpdating = True
     MsgBox "Process Completed"
 End Sub
@@ -209,4 +234,15 @@ Function detect_screen_no(screen_no As String, str1 As String, str2 As String) A
         End If
     Next i
     'detect_screen_no = ""
+End Function
+
+Function get_consumed_qty(material As String, qty As Double)
+'handle the case of same material in order component list multi times, keep track of the consumed quantity by previous components
+    If material_stock.Exists(material) = True Then
+        consumed_qty = material_stock.Item(material)
+    Else
+        consumed_qty = 0
+    End If
+    material_stock.Item(material) = consumed_qty + qty
+    get_consumed_qty = consumed_qty
 End Function
