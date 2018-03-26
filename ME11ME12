@@ -1,0 +1,159 @@
+Template
+Vendor Code
+P/N	"Description (this field is for information only, not used by the script)"	
+Purchasing Org.	
+Plant	
+Info record category1: Standard(default)2: subcontracting3: Consignment"	Supplier material Number	
+Prior Vendor
+L/T
+Standard qty
+minimum qty	
+Tax Code	
+new unit price(Exl. Tax)
+Currency CNY/USD/HKD/EUR(if leave empty will take vendor currency as default"
+Per(default 1, Optional)
+Valid From Date
+Valid to Date(Default 12/31/9999, optional)
+
+
+System Message
+
+Usage tips:
+1	first try create new info record, if exist, then change via ME12 to extend the validity period, whether create or change, please check the retrun message in column T
+2	Not for scale price
+3	Column title in RED are mandatory, other fields are mandatory, for optional field, leave the field value empty will take the system default value accordingly
+4	for number and date field, please match the SAP decimal and date format definition
+5	check the system message column to see whether upload successful or not
+6	Enter a min. order qty. that is less than the standard order qty.
+
+
+
+Sub Info_Record_Upload()
+    Set SapGuiAuto = GetObject("SAPGUI")  'Get the SAP GUI Scripting object
+    Set SAPApp = SapGuiAuto.GetScriptingEngine 'Get the currently running SAP GUI
+    Set SAPCon = SAPApp.Children(0) 'Get the first system that is currently connected
+    Set session = SAPCon.Children(0) 'Get the first session (window) on that connection
+        
+    For i = 2 To ActiveSheet.UsedRange.Rows.Count 'create Info Record
+        If Cells(i, 1) = "" Then
+            Exit For
+        End If
+        ' check mandatory fields
+        If Cells(i, 1) = "" Or Cells(i, 2) = "" Or Cells(i, 4) = "" Or Cells(i, 5) = "" Or Cells(i, 8) = "" Or Cells(i, 12) = "" Or Cells(i, 13) = "" Then
+            Cells(i, 20) = "please fill all mandatory fields in RED"
+        Else
+            session.findById("wnd[0]").resizeWorkingPane 233, 30, False
+            session.findById("wnd[0]/tbar[0]/okcd").Text = "/nme11"
+            session.findById("wnd[0]").sendVKey 0
+            'session.findById("wnd[0]/usr/radRM06I-NORMB").Select
+            session.findById("wnd[0]/usr/ctxtEINA-LIFNR").Text = Cells(i, 1) '"9301073"
+            session.findById("wnd[0]/usr/ctxtEINA-MATNR").Text = Cells(i, 2) '"03430337"
+            session.findById("wnd[0]/usr/ctxtEINE-EKORG").Text = Cells(i, 4)  '""
+            session.findById("wnd[0]/usr/ctxtEINE-WERKS").Text = Cells(i, 5)  '""
+            session.findById("wnd[0]/usr/ctxtEINA-INFNR").Text = ""
+            tcode = "ME11"
+            If Cells(i, 6) = 2 Then
+                session.findById("wnd[0]/usr/radRM06I-LOHNB").SetFocus
+            ElseIf Cells(i, 6) = 3 Then
+                session.findById("wnd[0]/usr/radRM06I-KONSI").SetFocus
+            Else
+                session.findById("wnd[0]/usr/radRM06I-NORMB").SetFocus
+            End If
+            session.findById("wnd[0]").sendVKey 0
+            MessageType = session.findById("wnd[0]/sbar").MessageType
+            If MessageType = "E" Then  'check whether already exist, use ME12 instead
+                result = session.findById("wnd[0]/sbar").Text
+                If InStr(result, "already exists") > 0 Then
+                    session.findById("wnd[0]/tbar[0]/okcd").Text = "/nme12"
+                    session.findById("wnd[0]").sendVKey 0
+                    'session.findById("wnd[0]/usr/radRM06I-NORMB").Select
+                    session.findById("wnd[0]/usr/ctxtEINA-LIFNR").Text = Cells(i, 1) '"9301073"
+                    session.findById("wnd[0]/usr/ctxtEINA-MATNR").Text = Cells(i, 2) '"03430337"
+                    session.findById("wnd[0]/usr/ctxtEINE-EKORG").Text = Cells(i, 4)  '""
+                    session.findById("wnd[0]/usr/ctxtEINE-WERKS").Text = Cells(i, 5)  '""
+                    session.findById("wnd[0]/usr/ctxtEINA-INFNR").Text = ""
+                    tcode = "ME12"
+                    If Cells(i, 6) = 2 Then
+                        session.findById("wnd[0]/usr/radRM06I-LOHNB").SetFocus
+                    ElseIf Cells(i, 6) = 3 Then
+                        session.findById("wnd[0]/usr/radRM06I-KONSI").SetFocus
+                    Else
+                        session.findById("wnd[0]/usr/radRM06I-NORMB").SetFocus
+                    End If
+                    session.findById("wnd[0]").sendVKey 0
+                    MessageType = session.findById("wnd[0]/sbar").MessageType
+                End If
+            End If
+            If MessageType = "E" Then  'check whether already exist, use ME12 instead
+                Cells(i, 20) = session.findById("wnd[0]/sbar").Text
+            Else
+                If MessageType = "W" Then
+                    session.findById("wnd[0]").sendVKey 0
+                End If
+                session.findById("wnd[0]/usr/txtEINA-IDNLF").Text = Cells(i, 7)  '"3882391"
+                session.findById("wnd[0]/usr/ctxtEINA-KOLIF").Text = Cells(i, 8) ' "C019"
+                
+                session.findById("wnd[0]/tbar[1]/btn[7]").press
+                session.findById("wnd[0]/usr/txtEINE-APLFZ").Text = Cells(i, 9)  '"30"
+                session.findById("wnd[0]/usr/txtEINE-NORBM").Text = Cells(i, 10) '"400"
+                session.findById("wnd[0]/usr/txtEINE-MINBM").Text = Cells(i, 11) '"400"
+                session.findById("wnd[0]/usr/ctxtEINE-MWSKZ").Text = Cells(i, 12) ' J0    'ctxt instead of txt
+                If tcode = "ME11" Then
+                    session.findById("wnd[0]/usr/txtEINE-NETPR").Text = Cells(i, 13) ' "1.54"
+                    If Cells(i, 14) <> "" Then
+                        session.findById("wnd[0]/usr/ctxtEINE-WAERS").Text = Cells(i, 14) '"cny"
+                    End If
+                    If Cells(i, 15) <> "" Then
+                        session.findById("wnd[0]/usr/txtEINE-PEINH").Text = Cells(i, 15)  '"1"
+                    End If
+                End If
+                session.findById("wnd[0]/tbar[1]/btn[8]").press
+                On Error Resume Next
+                    session.findById ("wnd[1]/tbar[0]/btn[0]")
+                If Err.Number = 0 Then
+                    session.findById("wnd[1]/tbar[0]/btn[0]").press
+                End If
+                If tcode = "ME11" Then
+                    If Cells(i, 16) <> "" Then
+                        session.findById("wnd[0]/usr/ctxtRV13A-DATAB").Text = Cells(i, 16)  '"03/24/2018"
+                    End If
+                    If Cells(i, 17) <> "" Then
+                        session.findById("wnd[0]/usr/ctxtRV13A-DATBI").Text = Cells(i, 17) '"12/30/9999"
+                    End If
+                Else
+                    session.findById("wnd[1]/tbar[0]/btn[7]").press
+                    If Cells(i, 16) <> "" Then
+                        session.findById("wnd[0]/usr/ctxtRV13A-DATAB").Text = Cells(i, 16) '"050418"
+                    End If
+                    If Cells(i, 17) <> "" Then
+                        session.findById("wnd[0]/usr/ctxtRV13A-DATBI").Text = Cells(i, 17) '"010119"
+                    End If
+                    session.findById("wnd[0]/usr/tblSAPMV13ATCTRL_D0201/txtKONP-KBETR[2,0]").Text = Cells(i, 13) '"251"
+                    If Cells(i, 14) <> "" Then
+                        session.findById("wnd[0]/usr/tblSAPMV13ATCTRL_D0201/ctxtKONP-KONWA[3,0]").Text = Cells(i, 14) '"usd"
+                    End If
+                    If Cells(i, 15) <> "" Then
+                        session.findById("wnd[0]/usr/tblSAPMV13ATCTRL_D0201/txtKONP-KPEIN[4,0]").Text = Cells(i, 15) '"10"
+                    End If
+                End If
+                If session.findById("wnd[0]/sbar").MessageType = "W" Then  ' in case there is warning message before SAVE
+                    session.findById("wnd[0]").sendVKey 0
+                End If
+                session.findById("wnd[0]/tbar[0]/btn[11]").press
+                If session.findById("wnd[0]/sbar").MessageType = "W" Then
+                    session.findById("wnd[0]").sendVKey 0
+                End If
+                If tcode <> "ME11" Then
+                    On Error Resume Next
+                        session.findById ("wnd[1]/tbar[0]/btn[5]")  'fix the validity period overlap case
+                    If Err.Number = 0 Then
+                        session.findById("wnd[1]/tbar[0]/btn[5]").press
+                    End If
+                End If
+                Cells(i, 20) = session.findById("wnd[0]/sbar").Text
+            End If
+        End If
+    Next i
+     MsgBox "Process Completed"
+End Sub
+ 
