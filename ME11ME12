@@ -52,12 +52,12 @@ Sub Info_Record_Upload()
             session.findById("wnd[0]/usr/ctxtEINE-WERKS").Text = Cells(i, 5)  '""
             session.findById("wnd[0]/usr/ctxtEINA-INFNR").Text = ""
             tcode = "ME11"
-            If Cells(i, 6) = 2 Then
-                session.findById("wnd[0]/usr/radRM06I-LOHNB").SetFocus
+             If Cells(i, 6) = 2 Then
+                session.findById("wnd[0]/usr/radRM06I-LOHNB").Selected = True
             ElseIf Cells(i, 6) = 3 Then
-                session.findById("wnd[0]/usr/radRM06I-KONSI").SetFocus
+                session.findById("wnd[0]/usr/radRM06I-KONSI").Selected = True
             Else
-                session.findById("wnd[0]/usr/radRM06I-NORMB").SetFocus
+                session.findById("wnd[0]/usr/radRM06I-NORMB").Selected = True
             End If
             session.findById("wnd[0]").sendVKey 0
             MessageType = session.findById("wnd[0]/sbar").MessageType
@@ -74,11 +74,11 @@ Sub Info_Record_Upload()
                     session.findById("wnd[0]/usr/ctxtEINA-INFNR").Text = ""
                     tcode = "ME12"
                     If Cells(i, 6) = 2 Then
-                        session.findById("wnd[0]/usr/radRM06I-LOHNB").SetFocus
+                        session.findById("wnd[0]/usr/radRM06I-LOHNB").Selected = True
                     ElseIf Cells(i, 6) = 3 Then
-                        session.findById("wnd[0]/usr/radRM06I-KONSI").SetFocus
+                        session.findById("wnd[0]/usr/radRM06I-KONSI").Selected = True
                     Else
-                        session.findById("wnd[0]/usr/radRM06I-NORMB").SetFocus
+                        session.findById("wnd[0]/usr/radRM06I-NORMB").Selected = True
                     End If
                     session.findById("wnd[0]").sendVKey 0
                     MessageType = session.findById("wnd[0]/sbar").MessageType
@@ -156,4 +156,4 @@ Sub Info_Record_Upload()
     Next i
      MsgBox "Process Completed"
 End Sub
- 
+
