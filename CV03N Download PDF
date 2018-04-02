@@ -1,0 +1,62 @@
+
+'download the PDF attachment from CV03n
+columns
+A      B       C     D                   Result
+DocNo  Type  Part  Version
+
+
+Sub CV03N_Download()
+    Set SapGuiAuto = GetObject("SAPGUI")  'Get the SAP GUI Scripting object
+    Set SAPApp = SapGuiAuto.GetScriptingEngine 'Get the currently running SAP GUI
+    Set SAPCon = SAPApp.Children(0) 'Get the first system that is currently connected
+    Set session = SAPCon.Children(0) 'Get the first session (window) on that connection
+        
+    For i = 2 To ActiveSheet.UsedRange.Rows.Count 'create Info Record
+        If Cells(i, 1) = "" Then
+            Exit For
+        End If
+        session.findById("wnd[0]").resizeWorkingPane 233, 38, False
+        session.findById("wnd[0]/tbar[0]/okcd").Text = "/ncv03n"
+        session.findById("wnd[0]").sendVKey 0
+        session.findById("wnd[0]/usr/ctxtDRAW-DOKNR").Text = Cells(i, 1) '"10742211"
+        session.findById("wnd[0]/usr/ctxtDRAW-DOKAR").Text = Cells(i, 2) '"eab"
+        session.findById("wnd[0]/usr/ctxtDRAW-DOKTL").Text = Cells(i, 3) '"100"
+        session.findById("wnd[0]/usr/ctxtDRAW-DOKVR").Text = Cells(i, 4) '"18"
+        session.findById("wnd[0]").sendVKey 0
+        MessageType = session.findById("wnd[0]/sbar").MessageType
+        If MessageType = "W" Then
+                session.findById("wnd[0]").sendVKey 0
+        End If
+        If MessageType = "E" Then
+            Cells(i, 8) = session.findById("wnd[0]/sbar").Text
+        Else
+            For j = 1 To 5
+                Description = session.findById("wnd[0]/usr/tabsTAB_MAIN/tabpTSMAIN/ssubSCR_MAIN:SAPLCV110:0102/txtDRAT-DKTXT").Text
+                'session.findById("wnd[0]/usr/tabsTAB_MAIN/tabpTSMAIN/ssubSCR_MAIN:SAPLCV110:0102/cntlCTL_FILES1/shellcont/shell/shellcont[1]/shell").selectNode "          2"
+                session.findById("wnd[0]/usr/tabsTAB_MAIN/tabpTSMAIN/ssubSCR_MAIN:SAPLCV110:0102/cntlCTL_FILES1/shellcont/shell/shellcont[1]/shell").nodeContextMenu "          " & CStr(j)  '"          2"
+                session.findById("wnd[0]/usr/tabsTAB_MAIN/tabpTSMAIN/ssubSCR_MAIN:SAPLCV110:0102/cntlCTL_FILES1/shellcont/shell/shellcont[1]/shell").selectContextMenuItem "CF_EXP_COPY"
+                Filename = session.findById("wnd[1]/usr/ctxtDRAW-FILEP").Text ' = "D:\temp\EAB-10742211-100-18-P41-101-20171018092133.pdf"
+                If Right(Filename, 4) = ".pdf" Then
+                    session.findById("wnd[1]/usr/ctxtDRAW-FILEP").Text = "D:\" & CStr(Cells(i, 2)) & "\" & CStr(Cells(i, 1)) & "-" & CStr(Cells(i, 2)) & "-" & CStr(Cells(i, 3)) & "-" & CStr(Cells(i, 4)) & " " & Description & ".pdf"
+                    session.findById("wnd[1]/tbar[0]/btn[0]").press
+                    Cells(i, 8) = session.findById("wnd[0]/sbar").Text
+                    Exit For
+                Else
+                    session.findById("wnd[1]").Close
+                End If
+            Next j
+            For k = 1 To 120
+                result = session.findById("wnd[0]/sbar").Text
+                If InStr(result, "bytes transferred") > 0 Then
+                    Cells(i, 8) = session.findById("wnd[0]/sbar").Text
+                    Exit For
+                End If
+                Application.Wait (Now + TimeValue("0:00:05"))
+            Next k
+            If Cells(i, 8) = "" Then
+                Cells(i, 8) = "Failed download PDF file"
+            End If
+        End If
+   Next i
+   MsgBox "Process Completed"
+End Sub
