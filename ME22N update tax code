@@ -1,0 +1,136 @@
+  Global SapGuiAuto As Object
+   Global Application As Object
+   Global Connection As Object
+   Global session As Object
+   
+Sub ME22N_update_Tax()
+   ' make sure the active sheet is the first sheet "template"
+    Dim entries As Object
+    
+    Set SapGuiAuto = GetObject("SAPGUI")  'Get the SAP GUI Scripting object
+    Set SAPApp = SapGuiAuto.GetScriptingEngine 'Get the currently running SAP GUI
+    Set SAPCon = SAPApp.Children(0) 'Get the first system that is currently connected
+    Set session = SAPCon.Children(0) 'Get the first session (window) on that connection
+    ' make sure the item detail is unfolded before using this script
+    session.findById("wnd[0]").resizeWorkingPane 232, 41, False
+    session.findById("wnd[0]").Iconify
+    session.findById("wnd[0]/tbar[0]/okcd").Text = "/nme22n"
+    session.findById("wnd[0]").sendVKey 0
+    session.findById("wnd[0]/tbar[1]/btn[17]").press
+    session.findById("wnd[1]/usr/subSUB0:SAPLMEGUI:0003/ctxtMEPO_SELECT-EBELN").Text = Cells(2, 1) '"4503491248"
+    session.findById("wnd[1]/usr/subSUB0:SAPLMEGUI:0003/radMEPO_SELECT-BSTYP_F").SetFocus
+    session.findById("wnd[1]/tbar[0]/btn[0]").press
+    screen_no1 = detect_screen_no("0020", "wnd[0]/usr/subSUB0:SAPLMEGUI:", "/subSUB3:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1301/subSUB2:SAPLMEGUI:1303/tabsITEM_DETAIL/tabpTABIDT7")
+    session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:" & screen_no1 & "/subSUB3:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1301/subSUB2:SAPLMEGUI:1303/tabsITEM_DETAIL/tabpTABIDT7").Select  'select invoice tab
+    screen_no2 = detect_screen_no("0010", "wnd[0]/usr/subSUB0:SAPLMEGUI:", "/subSUB3:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1301/subSUB2:SAPLMEGUI:1303/tabsITEM_DETAIL/tabpTABIDT7/ssubTABSTRIPCONTROL1SUB:SAPLMEGUI:1317/ctxtMEPO1317-MWSKZ")
+    For i = 2 To ActiveSheet.UsedRange.Rows.Count
+        If Cells(i, 1) = "" Then
+            Exit For
+        End If
+        If Cells(i, 1) <> Cells(i - 1, 1) Then
+            'session.findById("wnd[0]").resizeWorkingPane 232, 41, False
+            session.findById("wnd[0]/tbar[0]/okcd").Text = "/nme22n"
+            session.findById("wnd[0]").sendVKey 0
+            session.findById("wnd[0]/tbar[1]/btn[17]").press
+            session.findById("wnd[1]/usr/subSUB0:SAPLMEGUI:0003/ctxtMEPO_SELECT-EBELN").Text = Cells(i, 1) '"4503491248"
+            session.findById("wnd[1]/usr/subSUB0:SAPLMEGUI:0003/radMEPO_SELECT-BSTYP_F").SetFocus
+            session.findById("wnd[1]/tbar[0]/btn[0]").press
+            po_error = ""
+            item_processed = 0
+        End If
+        If po_error = "" Then  'skip processing the errrornous PO items
+            If session.findById("wnd[0]/sbar").MessageType = "E" Then   'handle error case
+                po_error = session.findById("wnd[0]/sbar").Text
+                Cells(i, 4).Value = ""
+                Cells(i, 5).Value = po_error
+            Else
+                item_no = CStr(Cells(i, 2))
+                item_key = ""
+                Set entries = session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:" & screen_no1 & "/subSUB3:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1301/subSUB1:SAPLMEGUI:6000/cmbDYN_6000-LIST").entries
+                For k = 0 To entries.Count - 1  'use the item number to fetch key of the dropdown box
+                    If item_no = Trim(Mid(entries(k).Value, 2, 4)) Then  ' entries(1).value like this "[ 650 ] Express Freight JUN 2017"
+                        item_key = entries(k).Key
+                        Exit For
+                    End If
+                Next k
+                If item_key <> "" Then
+                'On Error Resume Next
+                    session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:" & screen_no1 & "/subSUB3:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1301/subSUB1:SAPLMEGUI:6000/cmbDYN_6000-LIST").Key = item_key 'String(4 - Len(item_no), " ") & item_no  '"   2"
+                'If Err.Number = 0 Then
+                    session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:" & screen_no1 & "/subSUB3:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1301/subSUB2:SAPLMEGUI:1303/tabsITEM_DETAIL/tabpTABIDT7").Select  'select invoice tab
+                    old_tax_code = session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:" & screen_no2 & "/subSUB3:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1301/subSUB2:SAPLMEGUI:1303/tabsITEM_DETAIL/tabpTABIDT7/ssubTABSTRIPCONTROL1SUB:SAPLMEGUI:1317/ctxtMEPO1317-MWSKZ").Text ' = "JD"   ' fixed JD
+                    new_tax_code = ""
+                    If old_tax_code <> "" Then   'get the new tax code from tax code mapping table
+                        For j = 2 To Sheets("Tax Code Mapping").UsedRange.Rows.Count
+                            If Sheets("Tax Code Mapping").Cells(j, 1) = old_tax_code Then
+                                new_tax_code = Sheets("Tax Code Mapping").Cells(j, 2)
+                                Exit For
+                            End If
+                        Next j
+                    End If
+                    If new_tax_code <> "" Then
+                        session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:" & screen_no2 & "/subSUB3:SAPLMEVIEWS:1100/subSUB2:SAPLMEVIEWS:1200/subSUB1:SAPLMEGUI:1301/subSUB2:SAPLMEGUI:1303/tabsITEM_DETAIL/tabpTABIDT7/ssubTABSTRIPCONTROL1SUB:SAPLMEGUI:1317/ctxtMEPO1317-MWSKZ").Text = new_tax_code   ' fixed JD
+                        session.findById("wnd[0]").sendVKey 0
+                        Cells(i, 4).Value = "Tax Code Updated OK"
+                        item_processed = item_processed + 1
+                    Else
+                        Cells(i, 4).Value = "Old Tax Code:" & old_tax_code & " not in tax code mapping table, no change made"
+                    End If
+                Else
+                    Cells(i, 4).Value = "PO Item is not valid"
+                End If
+                If Cells(i, 1) <> Cells(i + 1, 1) Then  'next line PO number changed.
+                    session.findById("wnd[0]/tbar[0]/btn[11]").press
+                    'Call handle_warning_and_popup
+                    session.findById("wnd[0]").sendVKey 0
+                    On Error Resume Next   'close the popup window
+                        session.findById ("wnd[1]/usr/btnSPOP-VAROPTION1")
+                    If Err.Number = 0 Then
+                        session.findById("wnd[1]/usr/btnSPOP-VAROPTION1").press
+                    End If
+                    On Error Resume Next   'close the popup window
+                        session.findById ("wnd[1]")
+                    If Err.Number = 0 Then
+                        session.findById("wnd[0]").sendVKey 0
+                    End If
+                    If session.findById("wnd[0]/sbar").MessageType = "W" Then
+                        session.findById("wnd[0]").sendVKey 0
+                    End If
+                    If session.findById("wnd[0]/sbar").Text <> "" Then
+                        Cells(i, 5).Value = session.findById("wnd[0]/sbar").Text
+                    Else
+                        If item_processed > 0 Then
+                            Cells(i, 5).Value = "PO processed OK"
+                        Else
+                            Cells(i, 5).Value = "No valid items, No data Changed"
+                        End If
+                    End If
+                End If
+            End If
+        Else
+            Cells(i, 5).Value = po_error
+        End If
+    Next
+    Set entries = Nothing
+    Set session = Nothing
+    Set SAPCon = Nothing
+    Set SAPApp = Nothing
+    Set SapGuiAuto = Nothing
+    'MsgBox "Process Completed"
+End Sub
+Function detect_screen_no(screen_no As String, str1 As String, str2 As String) As String
+    On Error Resume Next
+        session.findById (str1 & screen_no & str2)
+    If Err.Number = 0 Then
+        detect_screen_no = screen_no
+    End If
+    For i = 20 To 10 Step -1
+        On Error Resume Next
+           session.findById (str1 & "00" & CStr(i) & str2)
+        If Err.Number = 0 Then
+            detect_screen_no = "00" & CStr(i)
+            Exit For
+        End If
+    Next i
+    'detect_screen_no = ""
+End Function
