@@ -1,0 +1,13 @@
+# generic interface to SAP via python+Excel Macro
+# interface database table as backend managed by python, from frontend: maybe web based , user fill the form and click one button to save data
+# to interface table which include at least the below info
+# tracking number, user, date, input data(may link to detail item table), status, sap tcode, excel_file, excel_macro
+# python run the below code to open target excel file and run the macro, in the macro, first retrieve the data from interface table, then upload
+# data to sap and retrieve the status feedback from sap, mark the record status accordingly.
+# this solution is very straight forward, no need infrastructure both hardware and software investment, easy to develop and maintain!
+import xlwings as xw
+wb = xw.App(0).books.open(r'd:\ME22N Tax update.xlsm')
+wb.macro('ME22N_update_Tax')()
+wb.save()
+
+
