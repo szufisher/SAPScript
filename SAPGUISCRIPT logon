@@ -1,0 +1,49 @@
+#work for logon by user and password, not work for PKI logon
+set WshShell = CreateObject("WScript.Shell")
+ Set proc = WshShell.Exec("C:\Program Files\SAP\FrontEnd\SAPgui\saplogon.exe")
+            Do While proc.Status = 0
+            WScript.Sleep 100
+      Loop
+   Set SapGui = GetObject("SAPGUI")
+Set Appl = SapGui.GetScriptingEngine
+ 
+Set Connection = Appl.Openconnection("Test SAP", True)
+Set session = Connection.Children(0)
+session.findById("wnd[0]/usr/txtRSYST-BNAME").Text = "xxx"
+session.findById("wnd[0]/usr/pwdRSYST-BCODE").Text = "xxxxx"
+session.findById("wnd[0]/usr/txtRSYST-LANGU").Text = "E"
+session.findById("wnd[0]").sendVKey 0
+ 
+If Not IsObject(application) Then
+   Set SapGuiAuto  = GetObject("SAPGUI")
+   Set application = SapGuiAuto.GetScriptingEngine
+End If
+If Not IsObject(connection) Then
+   Set connection = application.Children(0)
+End If
+If Not IsObject(session) Then
+   Set session    = connection.Children(0)
+End If
+If IsObject(WScript) Then
+   WScript.ConnectObject session,     "on"
+   WScript.ConnectObject application, "on"
+End If
+session.findById("wnd[0]").maximize
+session.findById("wnd[0]/tbar[0]/okcd").text = "/nMM03"
+session.findById("wnd[0]").sendVKey 0
+session.findById("wnd[0]/tbar[0]/okcd").text = "/nSE16"
+session.findById("wnd[0]").sendVKey 0
+session.findById("wnd[0]/usr/ctxtDATABROWSE-TABLENAME").text = "MARD"
+session.findById("wnd[0]/usr/ctxtDATABROWSE-TABLENAME").caretPosition = 4
+session.findById("wnd[0]").sendVKey 0
+session.findById("wnd[0]/usr/ctxtI2-LOW").text = "PLF6"
+session.findById("wnd[0]/usr/ctxtI2-LOW").setFocus
+session.findById("wnd[0]/usr/ctxtI2-LOW").caretPosition = 4
+session.findById("wnd[0]/tbar[1]/btn[8]").press
+session.findById("wnd[0]/mbar/menu[6]/menu[5]/menu[2]/menu[2]").select
+session.findById("wnd[1]/usr/sub/1/rad[1,0]").select
+session.findById("wnd[1]/usr/sub/1/rad[1,0]").setFocus
+session.findById("wnd[1]/tbar[0]/btn[0]").press
+session.findById("wnd[1]/usr/ctxtRLGRAP-FILENAME").text = "C:\MARD.xls"
+session.findById("wnd[1]/usr/ctxtRLGRAP-FILENAME").caretPosition = 11
+session.findById("wnd[1]").sendVKey 0
