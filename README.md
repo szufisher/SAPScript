@@ -19,7 +19,7 @@ SAP Script tips
                 CurrentRow = CurrentRow + 1
             End If
     for more details, refer to MIGO 261 order _new
-4. screen number change due to fold/ unfold status
+4. screen number change due to fold/ unfold status, or screen size, resolution
   Function detect_screen_no(screen_no As String, str1 As String, str2 As String) As String
     On Error Resume Next
         session.findById (str1 & screen_no & str2)
@@ -36,6 +36,10 @@ SAP Script tips
     Next i
     'detect_screen_no = ""
   End Function
+  
+  Except findByID, instead findByName(name, controltype) can be used to avoid the dynamic screen number issue, e.g  
+  session.findById("wnd[0]/usr").findByName("GODYNPRO-DETAIL_ZEILE", "GuiTextField").Text
+  for more details refer to MIGO 261 order New
 5. on error resume next to handle exception
         On Error Resume Next
            session.findById (str1 & "00" & CStr(i) & str2)
