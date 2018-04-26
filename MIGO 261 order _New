@@ -1,4 +1,4 @@
-     Global SapGuiAuto As Object
+   Global SapGuiAuto As Object
    Global Connection As Object
    Global session As Object
    Global material_stock As Object
