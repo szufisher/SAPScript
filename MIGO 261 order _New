@@ -25,7 +25,7 @@ Sub MIGO()
     Set non_deficit_error_msg = CreateObject("System.Collections.Stack")
     
     k = 1
-    
+    detail_unfolded = False  'to make sure the item detail is visible( the Detail data button is clicked)
     For i = 2 To Sheets("Orders To Be Processed").UsedRange.Rows.Count
         prod_order = Trim(CStr(Sheets("Orders To Be Processed").Cells(i, 1).Value))
         material_slip = Trim(CStr(Sheets("Orders To Be Processed").Cells(i, 2).Value))
@@ -55,6 +55,11 @@ Sub MIGO()
             'session.findById("wnd[0]").iconify
             session.findById("wnd[0]/tbar[0]/okcd").Text = "/nmigo"
             session.findById("wnd[0]").sendVKey 0
+            If detail_unfolded = False Then
+                detail_unfolded = True
+                On Error Resume Next
+                    session.findById("wnd[0]/usr").findByName("BUTTON_DETAIL", "GuiButton").press
+            End If
             session.findById("wnd[0]/usr").findByName("GODYNPRO-ACTION", "GuiComboBox").Key = "A07" 'goods issue
             session.findById("wnd[0]/usr/").findByName("GODYNPRO-REFDOC", "GuiComboBox").Key = "R08"  ' by order
             session.findById("wnd[0]/usr/").findByName("GODYNPRO-ORDER_NUMBER", "GuiCTextField").Text = prod_order '"21996501"
@@ -226,7 +231,8 @@ Sub MIGO()
                 ElseIf item_msg_icon = "" Then
                     error_message = err_msg
                 Else ' item is OK with green status, Iconname S_TL_G or S_TL_W
-                    actual_qty = get_available_stock(material, qty, qty)
+                    dummy_qty = get_available_stock(material, qty, qty) 'to be subtracted from own stock consumption for multi item case
+                    actual_qty = qty
                     If error_message = "" Then
                         error_message = "Item processed OK"
                     End If
@@ -300,7 +306,7 @@ Function detect_screen_no(screen_no As String, str1 As String, str2 As String) A
     'detect_screen_no = ""
 End Function
 
-Function get_available_stock(material As String, required_qty As Double, actual_qty As Double)
+Function get_available_stock(material As String, ByVal required_qty As Double, ByVal actual_qty As Double)
 'handle the case of same material in order component list multi times
     If material_stock.Exists(material) = True Then
         actual_qty = material_stock.Item(material)
@@ -308,4 +314,3 @@ Function get_available_stock(material As String, required_qty As Double, actual_
     material_stock.Item(material) = actual_qty - required_qty
     get_available_stock = actual_qty
 End Function
-
