@@ -1,4 +1,4 @@
-   Global SapGuiAuto As Object
+Global SapGuiAuto As Object
    Global Connection As Object
    Global session As Object
    Global material_stock As Object
@@ -41,12 +41,13 @@ Sub MIGO()
             ws.Name = prod_order
         End If
         ws.Select
+        Call setup_print_format
         k = 1
         Cells(k, 1) = "Order"
         Cells(k, 2) = "Item"
         Cells(k, 3) = "Material"
-        Cells(k, 4) = "Required Qty"
-        Cells(k, 5) = "Actual Posted Qty"
+        Cells(k, 4) = "Req. Qty"
+        Cells(k, 5) = "Actual Qty"
         Cells(k, 6) = "Item Processing Status"
         Cells(k, 7) = "Document Status"
         'processing result to be saved to separate worksheet,
@@ -314,3 +315,30 @@ Function get_available_stock(material As String, ByVal required_qty As Double, B
     material_stock.Item(material) = actual_qty - required_qty
     get_available_stock = actual_qty
 End Function
+
+Sub setup_print_format()
+    Range("A1:G1").Select
+    With Selection
+        .WrapText = True
+        .HorizontalAlignment = xlCenter
+        .WrapText = True
+        .RowHeight = 25
+        .Font.Bold = True
+    End With
+    Columns("A:E").ColumnWidth = 8
+    Columns("B:B").ColumnWidth = 5
+    Columns("F:F").ColumnWidth = 32
+    Columns("G:G").ColumnWidth = 45
+    
+    Range("F:F").Select
+    With Selection
+        .WrapText = True
+    End With
+    Range("A1").Select
+    With ActiveSheet.PageSetup
+        .PrintTitleRows = "$1:$1"
+        .CenterFooter = "Page &P of &N"
+        .Orientation = xlLandscape
+        .PrintGridlines = True
+    End With
+End Sub
