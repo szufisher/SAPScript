@@ -1,0 +1,126 @@
+   Global SapGuiAuto As Object
+   Global Connection As Object
+   Global session As Object
+   Global material_stock As Object
+   
+   
+Sub MIGO()
+    Set SapGuiAuto = GetObject("SAPGUI")  'Get the SAP GUI Scripting object
+    Set SAPApp = SapGuiAuto.GetScriptingEngine 'Get the currently running SAP GUI
+    Set SAPCon = SAPApp.Children(0) 'Get the first system that is currently connected
+    Set session = SAPCon.Children(0) 'Get the first session (window) on that connection
+   
+    Dim cur_row As Object
+             
+    session.findById("wnd[0]").maximize
+    'session.findById("wnd[0]").iconify
+    session.findById("wnd[0]/tbar[0]/okcd").Text = "/nmigo"
+    session.findById("wnd[0]").sendVKey 0
+    On Error Resume Next
+        session.findById("wnd[0]/usr").findByName("BUTTON_ITEMDETAIL", "GuiButton").press
+    session.findById("wnd[0]/usr").findByName("GODYNPRO-ACTION", "GuiComboBox").Key = "A07" 'goods issue
+    session.findById("wnd[0]/usr/").findByName("GODYNPRO-REFDOC", "GuiComboBox").Key = "R10"  ' other
+    session.findById("wnd[0]/usr").findByName("GODEFAULT_TV-BWART", "GuiCTextField").Text = "521"    'movement type
+    session.findById("wnd[0]/usr").findByName("GODEFAULT_TV-SOBKZ", "GuiCTextField").Text = "E"    'special stock
+    session.findById("wnd[0]").sendVKey 0
+    On Error Resume Next
+        session.findById("wnd[1]").Close     'close any possible popup window
+    PageSize = session.findById("wnd[0]/usr").findByName("SAPLMIGOTV_GOITEM", "GuiTableControl").verticalScrollbar.PageSize
+    For i = 2 To ActiveSheet.UsedRange.Rows.Count
+        If Cells(i, 1) = "" Then
+            Exit For
+        End If
+        j = i - 1
+        pageindex = j Mod PageSize
+        If pageindex = 1 Then
+            CurrentRow = 0
+            If j > 1 Then
+                session.findById("wnd[0]/tbar[0]/btn[82]").press   ' click the next page button
+                CurrentRow = 1 'at next page last row of prevous page as the 1st(0) row of the new page, so the currentrow need to be set as 1
+            End If
+            
+        Else
+            CurrentRow = CurrentRow + 1
+        End If
+        Set cur_row = session.findById("wnd[0]/usr").findByName("SAPLMIGOTV_GOITEM", "GuiTableControl").Rows(CurrentRow)
+        col_count = 0
+        For ii = 0 To cur_row.Count - 1     'get the col index due to different user settings
+            If cur_row(ii + 0).Name = "GOITEM-MAKTX" Then
+                col_mat = ii + 0
+                col_count = col_count + 1
+            ElseIf cur_row(ii + 0).Name = "GOITEM-ERFMG" Then
+                col_mat_qty = ii + 0
+                col_count = col_count + 1
+            ElseIf cur_row(ii + 0).Name = "GOITEM-LGOBE" Then
+                col_location = ii + 0
+                col_count = col_count + 1
+            ElseIf cur_row(ii + 0).Name = "GOITEM-NAME1" Then
+                col_plant = ii + 0
+                col_count = col_count + 1
+            ElseIf cur_row(ii + 0).Name = "GOITEM-SGTXT" Then
+                col_sn = ii + 0
+                col_count = col_count + 1
+            End If
+            If col_count > 4 Then
+                Exit For
+            End If
+        Next ii
+        Set cur_row = Nothing
+                
+        session.findById("wnd[0]/usr").findByName("SAPLMIGOTV_GOITEM", "GuiTableControl").Rows(CurrentRow)(col_mat + 0).Text = Cells(i, 3)
+        session.findById("wnd[0]/usr").findByName("SAPLMIGOTV_GOITEM", "GuiTableControl").Rows(CurrentRow)(col_mat_qty + 0).Text = Cells(i, 5)
+        session.findById("wnd[0]/usr").findByName("SAPLMIGOTV_GOITEM", "GuiTableControl").Rows(CurrentRow)(col_location + 0).Text = Cells(i, 12)
+        session.findById("wnd[0]/usr").findByName("SAPLMIGOTV_GOITEM", "GuiTableControl").Rows(CurrentRow)(col_plant + 0).Text = Cells(i, 11)
+        session.findById("wnd[0]/usr").findByName("SAPLMIGOTV_GOITEM", "GuiTableControl").Rows(CurrentRow)(col_sn + 0).Text = Cells(i, 7)
+        session.findById("wnd[0]").sendVKey 0   'after input material, plant , location, qty, text, Press ENTER to activate other dependent fields such as SO, SO Item, Val Type
+        If session.findById("wnd[0]/sbar").MessageType = "W" Then
+            session.findById("wnd[0]").sendVKey 0
+        End If
+        If session.findById("wnd[0]/sbar").MessageType = "E" Then
+            Cells(i, 16) = session.findById("wnd[0]/sbar").Text
+        Else
+        
+        Set cur_row = session.findById("wnd[0]/usr").findByName("SAPLMIGOTV_GOITEM", "GuiTableControl").Rows(CurrentRow)
+        col_count = 0
+        'for each row, the col index may differ because some fields may not applicable to specific row! so detect col index per row is needed
+        For ii = 0 To cur_row.Count - 1     'get col index due to different user settings
+            If cur_row(ii + 0).Name = "GOITEM-BWTAR" Then
+                col_val_type = ii + 0
+                col_count = col_count + 1
+            ElseIf cur_row(ii + 0).Name = "GOITEM-MAT_KDAUF" Then
+                col_so = ii + 0
+                col_count = col_count + 1
+            ElseIf cur_row(ii + 0).Name = "GOITEM-MAT_KDPOS" Then
+                col_so_item = ii + 0
+                col_count = col_count + 1
+            End If
+            If col_count > 2 Then
+                Exit For
+            End If
+        Next ii
+        Set cur_row = Nothing
+        
+        session.findById("wnd[0]/usr").findByName("SAPLMIGOTV_GOITEM", "GuiTableControl").Rows(CurrentRow)(col_so + 0).Text = Cells(i, 1)
+        session.findById("wnd[0]/usr").findByName("SAPLMIGOTV_GOITEM", "GuiTableControl").Rows(CurrentRow)(col_so_item + 0).Text = Cells(i, 13)
+        session.findById("wnd[0]/usr").findByName("SAPLMIGOTV_GOITEM", "GuiTableControl").Rows(CurrentRow)(col_val_type + 0).Text = Cells(i, 14)
+           ' session.findById("wnd[0]").sendVKey 0
+           If session.findById("wnd[0]/sbar").MessageType <> "E" Then
+                Cells(i, 16) = "Item Processed OK"
+           End If
+        End If
+    Next i
+    
+    session.findById("wnd[0]/tbar[0]/btn[11]").press   'save
+    MessageType = session.findById("wnd[0]/sbar").MessageType
+    If MessageType = "W" Then
+        session.findById("wnd[0]").sendVKey 0
+    End If
+    Cells(i, 17) = session.findById("wnd[0]/sbar").Text
+
+    Set session = Nothing
+    Set Connection = Nothing
+    Set SapGuiAuto = Nothing
+   
+    Application.ScreenUpdating = True
+    MsgBox "Process Completed"
+End Sub
