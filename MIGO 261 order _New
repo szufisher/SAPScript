@@ -1,4 +1,4 @@
-Global SapGuiAuto As Object
+   Global SapGuiAuto As Object
    Global Connection As Object
    Global session As Object
    Global material_stock As Object
@@ -7,8 +7,13 @@ Global SapGuiAuto As Object
 Sub MIGO()
     Set SapGuiAuto = GetObject("SAPGUI")  'Get the SAP GUI Scripting object
     Set SAPApp = SapGuiAuto.GetScriptingEngine 'Get the currently running SAP GUI
+    SAPApp.AllowSystemMessages = False
+    SAPApp.HistoryEnabled = False  'improve the performance
     Set SAPCon = SAPApp.Children(0) 'Get the first system that is currently connected
     Set session = SAPCon.Children(0) 'Get the first session (window) on that connection
+    dummy = session.LockSessionUI()
+    Application.Interactive = False
+    
     Dim screen_no As String
     Dim k As Integer
     Dim material As String
@@ -198,12 +203,17 @@ Sub MIGO()
                 material = session.findById("wnd[0]/usr").findByName("SAPLMIGOTV_GOITEM", "GuiTableControl").Rows(CurrentRow)(col_mat_no + 0).Text
                 If item_msg_icon = "S_TL_R" Then   ' error message
                     If InStr(error_message, "Deficit") > 0 Then   'no enough stock case
-                        session.findById("wnd[0]/usr").findByName("SAPLMIGOTV_GOITEM", "GuiTableControl").Rows(CurrentRow)(col_mat_desc + 0).SetFocus
-                        session.findById("wnd[0]").sendVKey 2   'double click to jump to material master
-                        session.findById("wnd[0]/usr/tabsTABSPR1/tabpSP29").Select   'click the storage location stock tab page
-                        actual_qty = session.findById("wnd[0]/usr").findByName("MARD-LABST", "GuiTextField").Text + 0  'get the storage locations unrestricted quantity +0 to force convert to number
-                        session.findById("wnd[0]/tbar[0]/btn[3]").press  'BACK from MM03 to MIGO
-                        actual_qty = get_available_stock(material, qty, actual_qty)
+                        consumed_qty = get_consumed_qty(material, 0, required_qty)
+                        If consumed_qty <> -1000 Then
+                            session.findById("wnd[0]/usr").findByName("SAPLMIGOTV_GOITEM", "GuiTableControl").Rows(CurrentRow)(col_mat_desc + 0).SetFocus
+                            session.findById("wnd[0]").sendVKey 2   'double click to jump to material master
+                            session.findById("wnd[0]/usr/tabsTABSPR1/tabpSP29").Select   'click the storage location stock tab page
+                            actual_qty = session.findById("wnd[0]/usr").findByName("MARD-LABST", "GuiTextField").Text + 0  'get the storage locations unrestricted quantity +0 to force convert to number
+                            session.findById("wnd[0]/tbar[0]/btn[3]").press  'BACK from MM03 to MIGO
+                            actual_qty = actual_qty - consumed_qty
+                        Else
+                            actual_qty = 0
+                        End If
                         If actual_qty > 0 Then
                             If actual_qty < qty Then
                                 session.findById("wnd[0]/usr").findByName("SAPLMIGOTV_GOITEM", "GuiTableControl").Rows(CurrentRow)(col_mat_qty + 0).Text = actual_qty
@@ -212,17 +222,21 @@ Sub MIGO()
                             End If
                         Else
                             actual_qty = 0
-                            If CurrentRow = 0 Then 'for the very first row, item ok can not be changed in grid, instead check at item detail only
+                            session.findById("wnd[0]/usr").findByName("SAPLMIGOTV_GOITEM", "GuiTableControl").Rows(CurrentRow)(col_item_ok + 0).Selected = False 'item OK
+                            'in case the item OK can not be changed from the grid row, locate the item by item no and switch to item detail screen to untick item OK accordingly
+                            If session.findById("wnd[0]/usr").findByName("SAPLMIGOTV_GOITEM", "GuiTableControl").Rows(CurrentRow)(col_item_ok + 0).Selected = True Then
+                                session.findById("wnd[0]/usr").findByName("GODYNPRO-DETAIL_ZEILE", "GuiTextField").Text = session.findById("wnd[0]/usr").findByName("SAPLMIGOTV_GOITEM", "GuiTableControl").Rows(CurrentRow)(0).Text
+                                session.findById("wnd[0]/usr").findByName("OK_LOCATE", "GuiButton").press
                                 session.findById("wnd[0]/usr").findByName("GODYNPRO-DETAIL_TAKE", "GuiComboBoxControl").Selected = False  'item OK
                                 session.findById("wnd[0]").sendVKey 0
-                            Else
-                                session.findById("wnd[0]/usr").findByName("SAPLMIGOTV_GOITEM", "GuiTableControl").Rows(CurrentRow)(col_item_ok + 0).Selected = False 'item OK
                             End If
                             error_message = "No stock available for GI"
                         End If
                     Else  'non deficit stock error, can not be handled by the script
                         actual_qty = 0
                         If CurrentRow = 0 Then 'for the very first row, item ok can not be changed in grid, instead check at item detail only
+                            session.findById("wnd[0]/usr").findByName("GODYNPRO-DETAIL_ZEILE", "GuiTextField").Text = session.findById("wnd[0]/usr").findByName("SAPLMIGOTV_GOITEM", "GuiTableControl").Rows(CurrentRow)(0).Text
+                            session.findById("wnd[0]/usr").findByName("OK_LOCATE", "GuiButton").press
                             session.findById("wnd[0]/usr").findByName("GODYNPRO-DETAIL_TAKE", "GuiComboBoxControl").Selected = False  'item OK
                             session.findById("wnd[0]").sendVKey 0
                         Else
@@ -232,7 +246,7 @@ Sub MIGO()
                 ElseIf item_msg_icon = "" Then
                     error_message = err_msg
                 Else ' item is OK with green status, Iconname S_TL_G or S_TL_W
-                    dummy_qty = get_available_stock(material, qty, qty) 'to be subtracted from own stock consumption for multi item case
+                    dummy_qty = get_consumed_qty(material, qty, 0) 'to be subtracted from own stock consumption for multi item case
                     actual_qty = qty
                     If error_message = "" Then
                         error_message = "Item processed OK"
@@ -277,43 +291,29 @@ ContinueNext_Order:
         material_stock.RemoveAll
     Next i
     
+    Application.Interactive = True
     Set material_stock = Nothing
+    SAPApp.HistoryEnabled = True  'improve the performance
+    dummy = session.UnlockSessionUI()
     Set session = Nothing
     Set Connection = Nothing
+    Set SAPApp = Nothing
     Set SapGuiAuto = Nothing
-   
-    Application.ScreenUpdating = True
+    'Application.ScreenUpdating = True
     MsgBox "Process Completed"
 End Sub
 
-Function screenno()   'get the dynamic screen number
-    screenno = Right(session.Children(0).Children(5).Children(1).Name, 4)
-End Function
-
-Function detect_screen_no(screen_no As String, str1 As String, str2 As String) As String
-    On Error Resume Next
-        session.findById (str1 & screen_no & str2)
-    If Err.Number = 0 Then
-        detect_screen_no = screen_no
-    End If
-    For i = 10 To 1 Step -1
-        On Error Resume Next
-           session.findById (str1 & "000" & CStr(i) & str2)
-        If Err.Number = 0 Then
-            detect_screen_no = "000" & CStr(i)
-            Exit For
-        End If
-    Next i
-    'detect_screen_no = ""
-End Function
-
-Function get_available_stock(material As String, ByVal required_qty As Double, ByVal actual_qty As Double)
+Function get_consumed_qty(material As String, ByVal required_qty As Double, ByVal actual_qty As Double)
 'handle the case of same material in order component list multi times
-    If material_stock.Exists(material) = True Then
-        actual_qty = material_stock.Item(material)
+'for green items, call it this way get_consume_qty(material, required_qty, 0), for red items get_consume_qty(material, 0, required_qty)
+    If actual_qty = 0 Then  ' for green item, accumulate consumed qty
+        consumed_qty = material_stock.Item(material) + required_qty
+        material_stock.Item(material) = consumed_qty
+    Else
+        consumed_qty = material_stock.Item(material)
+        material_stock.Item(material) = -1000   'next time for the same item, no need to check material stock again
     End If
-    material_stock.Item(material) = actual_qty - required_qty
-    get_available_stock = actual_qty
+    get_consumed_qty = consumed_qty
 End Function
 
 Sub setup_print_format()
@@ -327,8 +327,9 @@ Sub setup_print_format()
     End With
     Columns("A:E").ColumnWidth = 8
     Columns("B:B").ColumnWidth = 5
-    Columns("F:F").ColumnWidth = 32
-    Columns("G:G").ColumnWidth = 45
+    Columns("F:F").ColumnWidth = 30
+    Columns("G:G").ColumnWidth = 20
+    Columns("G:G").WrapText = True
     
     Range("F:F").Select
     With Selection
@@ -338,7 +339,7 @@ Sub setup_print_format()
     With ActiveSheet.PageSetup
         .PrintTitleRows = "$1:$1"
         .CenterFooter = "Page &P of &N"
-        .Orientation = xlLandscape
+        .Orientation = xlPortrait
         .PrintGridlines = True
     End With
 End Sub
