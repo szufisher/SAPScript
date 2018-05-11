@@ -1,0 +1,412 @@
+   Global SapGuiAuto As Object
+   Global Connection As Object
+   Global session As Object
+   Global material_stock As Object
+   
+   
+Sub MIGO()
+    Set SapGuiAuto = GetObject("SAPGUI")  'Get the SAP GUI Scripting object
+    Set SAPApp = SapGuiAuto.GetScriptingEngine 'Get the currently running SAP GUI
+    SAPApp.AllowSystemMessages = False
+    SAPApp.HistoryEnabled = False  'improve the performance
+    Set SAPCon = SAPApp.Children(0) 'Get the first system that is currently connected
+    Set session = SAPCon.Children(0) 'Get the first session (window) on that connection
+    dummy = session.LockSessionUI()
+    Application.Interactive = False
+    
+
+    Dim k As Integer
+    Dim material As String
+    Dim qty As Double
+    Dim actual_qty As Double
+    Dim non_deficit_error_item As Object
+    Dim non_deficit_error_msg As Object
+    Dim ws As Worksheet
+    Dim item_table, cur_row As Object
+    Dim ii As Integer
+    
+    Set material_stock = CreateObject("Scripting.Dictionary")
+    Set non_deficit_error_item = CreateObject("System.Collections.Stack")
+    Set non_deficit_error_msg = CreateObject("System.Collections.Stack")
+    
+    k = 1
+    detail_unfolded = False  'to make sure the item detail is visible( the Detail data button is clicked)
+    For i = 2 To Sheets("Orders To Be Processed").UsedRange.Rows.Count
+        Prod_order = Trim(CStr(Sheets("Orders To Be Processed").Cells(i, 1).Value))
+        material_slip = Trim(CStr(Sheets("Orders To Be Processed").Cells(i, 2).Value))
+        header_text = Trim(CStr(Sheets("Orders To Be Processed").Cells(i, 3).Value))
+        'processing result to be saved to separate worksheet, each sheet will be sent to different workstation
+        Set ws = Nothing
+        On Error Resume Next
+            Set ws = Sheets(Prod_order)
+        If Err.Number = 0 Then
+            ws.UsedRange.ClearContents
+        Else
+            Set ws = Sheets.Add(After:=Sheets(Sheets.Count))
+            ws.Name = Prod_order
+        End If
+        ws.Select
+        Call setup_print_format
+        Cells(1, 1) = "Goods Issue List"
+        Cells(2, 1) = " Order:"
+        Cells(2, 2) = Prod_order
+        Cells(2, 4) = "Date:"
+        Cells(2, 5).Formula = "=Now()"
+        k = 3
+        Cells(k, 1) = "Material"
+        Cells(k, 2) = "Description"
+        Cells(k, 3) = "Req. Qty"
+        Cells(k, 4) = "Actual Qty"
+        Cells(k, 5) = "Processing Status"
+        
+        'processing result to be saved to separate worksheet,
+        If Prod_order <> "" Then   ' new PO begin
+            session.findById("wnd[0]").maximize
+            'session.findById("wnd[0]").iconify
+            session.findById("wnd[0]/tbar[0]/okcd").Text = "/nmigo"
+            session.findById("wnd[0]").sendVKey 0
+            If detail_unfolded = False Then
+                detail_unfolded = True
+                On Error Resume Next
+                    session.findById("wnd[0]/usr").FindByNameEx("BUTTON_DETAIL", 40).press
+            End If
+            session.findById("wnd[0]/usr").FindByNameEx("GODYNPRO-ACTION", 34).Key = "A07" 'goods issue
+            session.findById("wnd[0]/usr/").FindByNameEx("GODYNPRO-REFDOC", 34).Key = "R08"  ' by order
+            session.findById("wnd[0]/usr/").FindByNameEx("GODYNPRO-ORDER_NUMBER", 32).Text = Prod_order '"21996501"
+            If session.findById("wnd[0]/usr").FindByNameEx("GODEFAULT_TV-BWART", 32).Text <> "261" Then
+                session.findById("wnd[0]/usr").FindByNameEx("GODEFAULT_TV-BWART", 32).Text = "261"    'movement type
+            End If
+            session.findById("wnd[0]").sendVKey 0
+            If session.findById("wnd[0]/sbar").MessageType = "E" Then
+                k = k + 1
+                Cells(k, 1) = ""
+                Cells(k, 2) = ""
+                Cells(k, 3) = ""
+                Cells(k, 4) = ""
+                Cells(k, 5) = session.findById("wnd[0]/sbar").Text
+                GoTo ContinueNext_Order
+            End If
+            
+            On Error Resume Next                              'close the popup window
+                session.findById ("wnd[1]")
+            If Err.Number = 0 Then
+                session.findById("wnd[1]").Close
+            End If
+            
+            session.findById("wnd[0]").sendVKey 0
+            session.findById("wnd[0]/usr").FindByNameEx("GOHEAD-MTSNR", 31).Text = material_slip
+            session.findById("wnd[0]/usr").FindByNameEx("GOHEAD-BKTXT", 31).Text = header_text
+            
+        End If
+        'the following object assignment is not workable, because after this assignment, when there is popup or switch to other transaction, SAP will auto Exit!!!
+        'Set item_table = session.findById("wnd[0]/usr").FindByNameEx("SAPLMIGOTV_GOITEM", 80)
+        total_items = session.findById("wnd[0]/usr").FindByNameEx("SAPLMIGOTV_GOITEM", 80).verticalScrollbar.Maximum + 1 '
+        If total_items = 0 Then
+            total_items = 1
+        End If
+        PageSize = session.findById("wnd[0]/usr").FindByNameEx("SAPLMIGOTV_GOITEM", 80).verticalScrollbar.PageSize
+        
+        session.findById("wnd[0]/tbar[1]/btn[7]").press   ' the check button to trigger the system message , info, warning, error
+        On Error Resume Next                              'close the popup window now, as we will handle the error message item by item
+            session.findById ("wnd[1]")
+        If Err.Number = 0 Then
+            'handle the non deficit error message case, these items need to be deactivated, then check the whole document again
+            Set Children = session.findById("wnd[1]/usr").Children
+            If Children(3).Tooltip = "Error" Then
+                error_cols = 4
+            Else
+                error_cols = 5
+            End If
+            For m = error_cols To Children.Count Step error_cols - 1 'error type(tooltip), item, description
+                If Children(m - 1).Tooltip = "Error" And InStr(Children(m + 1).Text, "Deficit") = 0 Then
+                    non_deficit_error_item.push Children(m + 0).Text
+                    non_deficit_error_msg.push Children(m + 1).Text
+                End If
+            Next m
+            Set Children = Nothing
+            session.findById("wnd[1]").Close
+            If non_deficit_error_item.Count > 0 Then
+                For n = 1 To non_deficit_error_item.Count
+                    Item = non_deficit_error_item.pop
+                    err_msg = non_deficit_error_msg.pop
+                    session.findById("wnd[0]/usr").FindByNameEx("GODYNPRO-DETAIL_ZEILE", 31).Text = Item
+                    session.findById("wnd[0]/usr").FindByNameEx("OK_LOCATE", 40).press
+                    session.findById("wnd[0]/usr").FindByNameEx("GODYNPRO-DETAIL_TAKE", 42).Selected = False
+                Next n
+                ' check the document again
+                session.findById("wnd[0]/tbar[1]/btn[7]").press
+                On Error Resume Next                              'close the popup window now, as we will handle the error message item by item
+                    session.findById ("wnd[1]")
+                If Err.Number = 0 Then
+                    session.findById("wnd[1]").Close
+                End If
+            End If
+        End If
+        
+        'sort and locate
+        'session.findById("wnd[0]/usr").FindByNameEx("SAPLMIGOTV_GOITEM", 80).Columns.elementAt(1).Selected = True
+        'session.findById("wnd[0]/usr").FindByNameEx("OK_SORT_DOWN", 40).press
+        'end of sort and locate
+        session.findById("wnd[0]/usr").FindByNameEx("SAPLMIGOTV_GOITEM", 80).verticalScrollbar.Position = 0
+        
+        actual_qty = 0
+        
+        For j = 1 To total_items
+            material = ""
+            actual_qty = 0
+            
+            pageindex = j Mod PageSize
+            If pageindex = 1 Then
+                If j > 1 Then
+                    session.findById("wnd[0]/tbar[0]/btn[82]").press   ' click the next page button
+                End If
+                CurrentRow = 0
+            Else
+                CurrentRow = CurrentRow + 1
+            End If
+            'columns in different row has different column index due to the fact that some columns not present in some rows such as the 5th documentation column
+            Set cur_row = session.findById("wnd[0]/usr").FindByNameEx("SAPLMIGOTV_GOITEM", 80).Rows(CurrentRow)
+            col_count = 0
+            For ii = 0 To cur_row.Count - 1     'get the col index due to different user settings
+                If cur_row(ii + 0).Name = "GOITEM-LOGLEVEL" Then '+0 to force convert to expected Integer type, otherwise there will be error:Bad index type for collection access
+                    col_log_level = ii + 0
+                    col_count = col_count + 1
+                ElseIf cur_row(ii + 0).Name = "GOITEM-MAKTX" Then
+                    col_mat_desc = ii + 0
+                    col_count = col_count + 1
+                ElseIf cur_row(ii + 0).Name = "GOITEM-TAKE_IT" Then
+                    col_item_ok = ii + 0
+                    col_count = col_count + 1
+                ElseIf cur_row(ii + 0).Name = "GOITEM-ERFMG" Then
+                    col_mat_qty = ii + 0
+                    col_count = col_count + 1
+                ElseIf cur_row(ii + 0).Name = "GOITEM-MATNR" Then
+                    col_mat_no = ii + 0
+                    col_count = col_count + 1
+                End If
+                If col_count > 4 Then
+                    Exit For
+                End If
+            Next ii
+            Set cur_row = Nothing
+
+            required_qty = session.findById("wnd[0]/usr").FindByNameEx("SAPLMIGOTV_GOITEM", 80).Rows(CurrentRow)(col_mat_qty + 0).Text
+            If Trim(required_qty) = "" Then
+                qty = 0
+            Else
+                qty = required_qty + 0
+            End If
+            'the address/path to the table's active cell: tablecontrol.Rows(rowindex)(columnindex), eg. table_items.Rows(0)(4), means the first row, the 5th column
+            'assign variable for tablecontrol, row or column will trigger sap auto exit when switch to other transaction or popup window!!!
+            If qty > 0 Then  ' handle the case the already delivery completed item proposed by system per user default setting, under this case, bypass this item
+                'handle error message
+                item_msg_icon = session.findById("wnd[0]/usr").FindByNameEx("SAPLMIGOTV_GOITEM", 80).Rows(CurrentRow)(col_log_level + 0).IconName
+                error_message = session.findById("wnd[0]/usr").FindByNameEx("SAPLMIGOTV_GOITEM", 80).Rows(CurrentRow)(col_log_level + 0).Tooltip  'IconName: S_TL_R, S_TL_G, Tooltip: the text maybe truncated
+                material = session.findById("wnd[0]/usr").FindByNameEx("SAPLMIGOTV_GOITEM", 80).Rows(CurrentRow)(col_mat_no + 0).Text
+                Description = session.findById("wnd[0]/usr").FindByNameEx("SAPLMIGOTV_GOITEM", 80).Rows(CurrentRow)(col_mat_desc + 0).Text
+                If item_msg_icon = "S_TL_R" Then   ' error message
+                    If InStr(error_message, "Deficit") > 0 Then   'no enough stock case
+                        consumed_qty = get_consumed_qty(material, 0, required_qty)
+                        If consumed_qty <> -1000 Then
+                            session.findById("wnd[0]/usr").FindByNameEx("SAPLMIGOTV_GOITEM", 80).Rows(CurrentRow)(col_mat_desc + 0).SetFocus
+                            session.findById("wnd[0]").sendVKey 2   'double click to jump to material master
+                            session.findById("wnd[0]/usr/tabsTABSPR1/tabpSP29").Select   'click the storage location stock tab page
+                            actual_qty = session.findById("wnd[0]/usr").FindByNameEx("MARD-LABST", 31).Text + 0  'get the storage locations unrestricted quantity +0 to force convert to number
+                            session.findById("wnd[0]/tbar[0]/btn[3]").press  'BACK from MM03 to MIGO
+                            actual_qty = actual_qty - consumed_qty
+                        Else
+                            actual_qty = 0
+                        End If
+                        If actual_qty > 0 Then
+                            If actual_qty < qty Then
+                                session.findById("wnd[0]/usr").FindByNameEx("SAPLMIGOTV_GOITEM", 80).Rows(CurrentRow)(col_mat_qty + 0).Text = actual_qty
+                            Else
+                                actual_qty = qty
+                            End If
+                        Else
+                            actual_qty = 0
+                            session.findById("wnd[0]/usr").FindByNameEx("SAPLMIGOTV_GOITEM", 80).Rows(CurrentRow)(col_item_ok + 0).Selected = False 'item OK
+                            'in case the item OK can not be changed from the grid row, locate the item by item no and switch to item detail screen to untick item OK accordingly
+                            If session.findById("wnd[0]/usr").FindByNameEx("SAPLMIGOTV_GOITEM", 80).Rows(CurrentRow)(col_item_ok + 0).Selected = True Then
+                                session.findById("wnd[0]/usr").FindByNameEx("GODYNPRO-DETAIL_ZEILE", 31).Text = session.findById("wnd[0]/usr").FindByNameEx("SAPLMIGOTV_GOITEM", 80).Rows(CurrentRow)(0).Text
+                                session.findById("wnd[0]/usr").FindByNameEx("OK_LOCATE", 40).press
+                                session.findById("wnd[0]/usr").FindByNameEx("GODYNPRO-DETAIL_TAKE", 128).Selected = False  'item OK
+                                session.findById("wnd[0]").sendVKey 0
+                            End If
+                            error_message = "No stock available for GI"
+                        End If
+                    Else  'non deficit stock error, can not be handled by the script
+                        actual_qty = 0
+                        If CurrentRow = 0 Then 'for the very first row, item ok can not be changed in grid, instead check at item detail only
+                            session.findById("wnd[0]/usr").FindByNameEx("GODYNPRO-DETAIL_ZEILE", 31).Text = session.findById("wnd[0]/usr").FindByNameEx("SAPLMIGOTV_GOITEM", 80).Rows(CurrentRow)(0).Text
+                            session.findById("wnd[0]/usr").FindByNameEx("OK_LOCATE", 40).press
+                            session.findById("wnd[0]/usr").FindByNameEx("GODYNPRO-DETAIL_TAKE", 128).Selected = False  'item OK
+                            session.findById("wnd[0]").sendVKey 0
+                        Else
+                            session.findById("wnd[0]/usr").FindByNameEx("SAPLMIGOTV_GOITEM", 80).Rows(CurrentRow)(col_item_ok + 0).Selected = False 'item OK
+                        End If
+                    End If
+                ElseIf item_msg_icon = "" Then
+                    error_message = err_msg
+                Else ' item is OK with green status, Iconname S_TL_G or S_TL_W
+                    dummy_qty = get_consumed_qty(material, qty, 0) 'to be subtracted from own stock consumption for multi item case
+                    actual_qty = qty
+                    If error_message = "" Then
+                        error_message = "Item processed OK"
+                    End If
+                End If
+                k = k + 1
+                'Cells(k, 1) = prod_order
+                'Cells(k, 2) = session.findById("wnd[0]/usr").FindByNameEx("SAPLMIGOTV_GOITEM", 80).Rows(CurrentRow)(0).Text       'item
+                Cells(k, 1) = material                                                                                                         'material
+                Cells(k, 2) = Description
+                Cells(k, 3) = qty                                                                                                              ' required quantity
+                Cells(k, 4) = actual_qty                                                                                                       'issued quantity
+                Cells(k, 5) = error_message
+            End If ' if qty <> ""
+        Next j
+        session.findById("wnd[0]/tbar[0]/btn[11]").press   'save
+        MessageType = session.findById("wnd[0]/sbar").MessageType
+        If MessageType = "W" Then
+            session.findById("wnd[0]").sendVKey 0
+        End If
+        On Error Resume Next   'get the popup error message window content which only triggerred when SAVE or Check the whole document
+           session.findById ("wnd[1]/tbar[0]/btn[0]")
+        If Err.Number = 0 Then
+           session.findById("wnd[1]/tbar[0]/btn[18]").press   'hide info message
+           session.findById("wnd[1]/tbar[0]/btn[19]").press   'hide warning message
+           On Error Resume Next
+                session.findById ("wnd[1]/usr/lbl[5,3]")
+           If Err.Number = 0 Then
+               error_result = "item:" + session.findById("wnd[1]/usr/lbl[5,3]").Text + " with error: " + session.findById("wnd[1]/usr/lbl[10,3]").Text
+           End If
+           session.findById("wnd[1]/tbar[0]/btn[0]").press
+        End If
+        result = session.findById("wnd[0]/sbar").Text
+        
+        If InStr(result, "Material document ") > 0 Then  'Material document 5014695540 posted
+            status_strings = Split(result, " ")
+            material_document = status_strings(UBound(status_strings) - 1)
+            Call combine_material
+            last_row = ActiveSheet.UsedRange.Rows.Count
+            Cells(last_row + 1, 4).Value = "Document Processing Status:"
+            Cells(last_row + 1, 5).Value = result
+        Else
+            Cells(k + 1, 4).Value = "Document Processing Status:"
+            Cells(k + 1, 5).Value = "failed , reason:" & result + " " + error_result
+        End If
+ContinueNext_Order:
+        material_stock.RemoveAll
+    Next i
+    
+    Application.Interactive = True
+    Set material_stock = Nothing
+    SAPApp.HistoryEnabled = True  'improve the performance
+    dummy = session.UnlockSessionUI()
+    Set session = Nothing
+    Set Connection = Nothing
+    Set SAPApp = Nothing
+    Set SapGuiAuto = Nothing
+    'Application.ScreenUpdating = True
+    MsgBox "Process Completed"
+End Sub
+
+Function screenno()   'get the dynamic screen number
+    screenno = Right(session.Children(0).Children(5).Children(1).Name, 4)
+End Function
+
+Function detect_screen_no(screen_no As String, str1 As String, str2 As String) As String
+    On Error Resume Next
+        session.findById (str1 & screen_no & str2)
+    If Err.Number = 0 Then
+        detect_screen_no = screen_no
+    End If
+    For i = 10 To 1 Step -1
+        On Error Resume Next
+           session.findById (str1 & "000" & CStr(i) & str2)
+        If Err.Number = 0 Then
+            detect_screen_no = "000" & CStr(i)
+            Exit For
+        End If
+    Next i
+    'detect_screen_no = ""
+End Function
+
+Function get_consumed_qty(material As String, ByVal required_qty As Double, ByVal actual_qty As Double)
+'handle the case of same material in order component list multi times
+'for green items, call it this way get_consume_qty(material, required_qty, 0), for red items get_consume_qty(material, 0, required_qty)
+    If actual_qty = 0 Then  ' for green item, accumulate consumed qty
+        consumed_qty = material_stock.Item(material) + required_qty
+        material_stock.Item(material) = consumed_qty
+    Else
+        consumed_qty = material_stock.Item(material)
+        material_stock.Item(material) = -1000   'next time for the same item, no need to check material stock again
+    End If
+    get_consumed_qty = consumed_qty
+End Function
+
+Sub setup_print_format()
+    Range("A1,A2,D2").Font.Bold = True
+    Range("A2,D2").HorizontalAlignment = xlRight
+    Range("B2,E2").HorizontalAlignment = xlLeft
+    Range("A1:E1").Select
+    Selection.Merge
+    Selection.HorizontalAlignment = xlCenter
+    Selection.Font.Size = 16
+    Range("A3:E3").Select
+    With Selection
+        .WrapText = True
+        .HorizontalAlignment = xlCenter
+        .WrapText = True
+        .RowHeight = 25
+        .Font.Bold = True
+    End With
+    Columns("A:A").ColumnWidth = 8
+    Columns("B:B").ColumnWidth = 34
+    Columns("C:D").ColumnWidth = 8
+    Columns("E:E").ColumnWidth = 38
+    Columns("E:E").WrapText = True
+    Range("A1").Select
+    With ActiveSheet.PageSetup
+        .PrintTitleRows = "$1:$3"
+        .CenterFooter = "Page &P of &N"
+        .Orientation = xlPortrait
+        .PrintGridlines = True
+        'narrow margin
+        .LeftMargin = Application.InchesToPoints(0.25)
+        .RightMargin = Application.InchesToPoints(0.25)
+        .TopMargin = Application.InchesToPoints(0.75)
+        .BottomMargin = Application.InchesToPoints(0.75)
+        .HeaderMargin = Application.InchesToPoints(0.3)
+        .FooterMargin = Application.InchesToPoints(0.3)
+    End With
+End Sub
+
+Sub combine_material()
+    Dim lastrow As Long
+    '1st sort by material column
+    lastrow = ActiveSheet.UsedRange.Rows.Count
+    Range("A4:E" & lastrow).Sort key1:=Range("A4:E" & lastrow), _
+        order1:=xlAscending, Header:=xlNo
+    last_material = ""
+    last_row = 0
+    'combine qty and processing log, and delete the duplicate rows
+    For i = 4 To ActiveSheet.UsedRange.Rows.Count
+        If Cells(i, 1) = "" Then
+            Exit For
+        End If
+        If Cells(i, 1) <> last_material Then
+            last_material = Cells(i, 1)
+            last_row = i
+        Else
+            Cells(last_row, 3) = Cells(last_row, 3) + Cells(i, 3)
+            Cells(last_row, 4) = Cells(last_row, 4) + Cells(i, 4)
+            If InStr(Cells(last_row, 5).Text, Cells(i, 5).Text) = 0 Then
+                Cells(last_row, 5) = Cells(last_row, 5) & ";" & Cells(i, 5)
+            End If
+            Rows(i).EntireRow.Delete
+            i = i - 1     'after the current row delete, restore the skipped row
+        End If
+    Next i
+
+End Sub
