@@ -1,4 +1,4 @@
-   Global SapGuiAuto As Object
+Global SapGuiAuto As Object
    Global Connection As Object
    Global session As Object
    Global material_stock As Object
@@ -14,7 +14,7 @@ Sub MIGO()
     dummy = session.LockSessionUI()
     Application.Interactive = False
     
-    Dim screen_no As String
+
     Dim k As Integer
     Dim material As String
     Dim qty As Double
@@ -32,31 +32,35 @@ Sub MIGO()
     k = 1
     detail_unfolded = False  'to make sure the item detail is visible( the Detail data button is clicked)
     For i = 2 To Sheets("Orders To Be Processed").UsedRange.Rows.Count
-        prod_order = Trim(CStr(Sheets("Orders To Be Processed").Cells(i, 1).Value))
+        Prod_order = Trim(CStr(Sheets("Orders To Be Processed").Cells(i, 1).Value))
         material_slip = Trim(CStr(Sheets("Orders To Be Processed").Cells(i, 2).Value))
         header_text = Trim(CStr(Sheets("Orders To Be Processed").Cells(i, 3).Value))
         'processing result to be saved to separate worksheet, each sheet will be sent to different workstation
         Set ws = Nothing
         On Error Resume Next
-            Set ws = Sheets(prod_order)
+            Set ws = Sheets(Prod_order)
         If Err.Number = 0 Then
             ws.UsedRange.ClearContents
         Else
             Set ws = Sheets.Add(After:=Sheets(Sheets.Count))
-            ws.Name = prod_order
+            ws.Name = Prod_order
         End If
         ws.Select
         Call setup_print_format
-        k = 1
-        Cells(k, 1) = "Order"
-        Cells(k, 2) = "Item"
-        Cells(k, 3) = "Material"
-        Cells(k, 4) = "Req. Qty"
-        Cells(k, 5) = "Actual Qty"
-        Cells(k, 6) = "Item Processing Status"
-        Cells(k, 7) = "Document Status"
+        Cells(1, 1) = "Goods Issue List"
+        Cells(2, 1) = " Order:"
+        Cells(2, 2) = Prod_order
+        Cells(2, 4) = "Date:"
+        Cells(2, 5).Formula = "=Now()"
+        k = 3
+        Cells(k, 1) = "Material"
+        Cells(k, 2) = "Description"
+        Cells(k, 3) = "Req. Qty"
+        Cells(k, 4) = "Actual Qty"
+        Cells(k, 5) = "Processing Status"
+        
         'processing result to be saved to separate worksheet,
-        If prod_order <> "" Then   ' new PO begin
+        If Prod_order <> "" Then   ' new PO begin
             session.findById("wnd[0]").maximize
             'session.findById("wnd[0]").iconify
             session.findById("wnd[0]/tbar[0]/okcd").Text = "/nmigo"
@@ -64,24 +68,22 @@ Sub MIGO()
             If detail_unfolded = False Then
                 detail_unfolded = True
                 On Error Resume Next
-                    session.findById("wnd[0]/usr").findByName("BUTTON_DETAIL", "GuiButton").press
+                    session.findById("wnd[0]/usr").FindByNameEx("BUTTON_DETAIL", 40).press
             End If
-            session.findById("wnd[0]/usr").findByName("GODYNPRO-ACTION", "GuiComboBox").Key = "A07" 'goods issue
-            session.findById("wnd[0]/usr/").findByName("GODYNPRO-REFDOC", "GuiComboBox").Key = "R08"  ' by order
-            session.findById("wnd[0]/usr/").findByName("GODYNPRO-ORDER_NUMBER", "GuiCTextField").Text = prod_order '"21996501"
-            If session.findById("wnd[0]/usr").findByName("GODEFAULT_TV-BWART", "GuiCTextField").Text <> "261" Then
-                session.findById("wnd[0]/usr").findByName("GODEFAULT_TV-BWART", "GuiCTextField").Text = "261"    'movement type
+            session.findById("wnd[0]/usr").FindByNameEx("GODYNPRO-ACTION", 34).Key = "A07" 'goods issue
+            session.findById("wnd[0]/usr/").FindByNameEx("GODYNPRO-REFDOC", 34).Key = "R08"  ' by order
+            session.findById("wnd[0]/usr/").FindByNameEx("GODYNPRO-ORDER_NUMBER", 32).Text = Prod_order '"21996501"
+            If session.findById("wnd[0]/usr").FindByNameEx("GODEFAULT_TV-BWART", 32).Text <> "261" Then
+                session.findById("wnd[0]/usr").FindByNameEx("GODEFAULT_TV-BWART", 32).Text = "261"    'movement type
             End If
             session.findById("wnd[0]").sendVKey 0
             If session.findById("wnd[0]/sbar").MessageType = "E" Then
                 k = k + 1
-                Cells(k, 1) = prod_order
+                Cells(k, 1) = ""
                 Cells(k, 2) = ""
                 Cells(k, 3) = ""
                 Cells(k, 4) = ""
-                Cells(k, 5) = ""
-                Cells(k, 6) = ""
-                Cells(k, 7) = session.findById("wnd[0]/sbar").Text
+                Cells(k, 5) = session.findById("wnd[0]/sbar").Text
                 GoTo ContinueNext_Order
             End If
             
@@ -92,17 +94,16 @@ Sub MIGO()
             End If
             
             session.findById("wnd[0]").sendVKey 0
-            session.findById("wnd[0]/usr").findByName("GOHEAD-MTSNR", "GuiTextField").Text = material_slip
-            session.findById("wnd[0]/usr").findByName("GOHEAD-BKTXT", "GuiTextField").Text = header_text
+            session.findById("wnd[0]/usr").FindByNameEx("GOHEAD-MTSNR", 31).Text = material_slip
+            session.findById("wnd[0]/usr").FindByNameEx("GOHEAD-BKTXT", 31).Text = header_text
             
         End If
         'the following object assignment is not workable, because after this assignment, when there is popup or switch to other transaction, SAP will auto Exit!!!
-        'Set item_table = session.findById("wnd[0]/usr").findByName("SAPLMIGOTV_GOITEM", "GuiTableControl")
-        total_items = session.findById("wnd[0]/usr").findByName("SAPLMIGOTV_GOITEM", "GuiTableControl").verticalScrollbar.Maximum + 1 '
+        'Set item_table = session.findById("wnd[0]/usr").FindByNameEx("SAPLMIGOTV_GOITEM", 80)
+        total_items = session.findById("wnd[0]/usr").FindByNameEx("SAPLMIGOTV_GOITEM", 80).verticalScrollbar.Maximum + 1 '
         If total_items = 0 Then
             total_items = 1
         End If
-        PageSize = session.findById("wnd[0]/usr").findByName("SAPLMIGOTV_GOITEM", "GuiTableControl").verticalScrollbar.PageSize
         
         session.findById("wnd[0]/tbar[1]/btn[7]").press   ' the check button to trigger the system message , info, warning, error
         On Error Resume Next                              'close the popup window now, as we will handle the error message item by item
@@ -127,9 +128,9 @@ Sub MIGO()
                 For n = 1 To non_deficit_error_item.Count
                     Item = non_deficit_error_item.pop
                     err_msg = non_deficit_error_msg.pop
-                    session.findById("wnd[0]/usr").findByName("GODYNPRO-DETAIL_ZEILE", "GuiTextField").Text = Item
-                    session.findById("wnd[0]/usr").findByName("OK_LOCATE", "GuiButton").press
-                    session.findById("wnd[0]/usr").findByName("GODYNPRO-DETAIL_TAKE", "GuiCheckBox").Selected = False
+                    session.findById("wnd[0]/usr").FindByNameEx("GODYNPRO-DETAIL_ZEILE", 31).Text = Item
+                    session.findById("wnd[0]/usr").FindByNameEx("OK_LOCATE", 40).press
+                    session.findById("wnd[0]/usr").FindByNameEx("GODYNPRO-DETAIL_TAKE", 42).Selected = False
                 Next n
                 ' check the document again
                 session.findById("wnd[0]/tbar[1]/btn[7]").press
@@ -141,12 +142,11 @@ Sub MIGO()
             End If
         End If
         
-        'sort and locate
-        'session.findById("wnd[0]/usr").findByName("SAPLMIGOTV_GOITEM", "GuiTableControl").Columns.elementAt(1).Selected = True
-        'session.findById("wnd[0]/usr").findByName("OK_SORT_DOWN", "GuiButton").press
-        'end of sort and locate
-        session.findById("wnd[0]/usr").findByName("SAPLMIGOTV_GOITEM", "GuiTableControl").verticalScrollbar.Position = 0
-        
+        On Error Resume Next  'unfold the detail screen to enable the first row Item OK and quantity field editable
+            session.findById("wnd[0]/usr").FindByNameEx("BUTTON_ITEMDETAIL", 40).press
+                    
+        PageSize = session.findById("wnd[0]/usr").FindByNameEx("SAPLMIGOTV_GOITEM", 80).verticalScrollbar.PageSize
+        session.findById("wnd[0]/usr").FindByNameEx("SAPLMIGOTV_GOITEM", 80).verticalScrollbar.Position = 0
         actual_qty = 0
         
         For j = 1 To total_items
@@ -163,7 +163,7 @@ Sub MIGO()
                 CurrentRow = CurrentRow + 1
             End If
             'columns in different row has different column index due to the fact that some columns not present in some rows such as the 5th documentation column
-            Set cur_row = session.findById("wnd[0]/usr").findByName("SAPLMIGOTV_GOITEM", "GuiTableControl").Rows(CurrentRow)
+            Set cur_row = session.findById("wnd[0]/usr").FindByNameEx("SAPLMIGOTV_GOITEM", 80).Rows(CurrentRow)
             col_count = 0
             For ii = 0 To cur_row.Count - 1     'get the col index due to different user settings
                 If cur_row(ii + 0).Name = "GOITEM-LOGLEVEL" Then '+0 to force convert to expected Integer type, otherwise there will be error:Bad index type for collection access
@@ -188,7 +188,7 @@ Sub MIGO()
             Next ii
             Set cur_row = Nothing
 
-            required_qty = session.findById("wnd[0]/usr").findByName("SAPLMIGOTV_GOITEM", "GuiTableControl").Rows(CurrentRow)(col_mat_qty + 0).Text
+            required_qty = session.findById("wnd[0]/usr").FindByNameEx("SAPLMIGOTV_GOITEM", 80).Rows(CurrentRow)(col_mat_qty + 0).Text
             If Trim(required_qty) = "" Then
                 qty = 0
             Else
@@ -198,17 +198,18 @@ Sub MIGO()
             'assign variable for tablecontrol, row or column will trigger sap auto exit when switch to other transaction or popup window!!!
             If qty > 0 Then  ' handle the case the already delivery completed item proposed by system per user default setting, under this case, bypass this item
                 'handle error message
-                item_msg_icon = session.findById("wnd[0]/usr").findByName("SAPLMIGOTV_GOITEM", "GuiTableControl").Rows(CurrentRow)(col_log_level + 0).IconName
-                error_message = session.findById("wnd[0]/usr").findByName("SAPLMIGOTV_GOITEM", "GuiTableControl").Rows(CurrentRow)(col_log_level + 0).Tooltip  'IconName: S_TL_R, S_TL_G, Tooltip: the text maybe truncated
-                material = session.findById("wnd[0]/usr").findByName("SAPLMIGOTV_GOITEM", "GuiTableControl").Rows(CurrentRow)(col_mat_no + 0).Text
+                item_msg_icon = session.findById("wnd[0]/usr").FindByNameEx("SAPLMIGOTV_GOITEM", 80).Rows(CurrentRow)(col_log_level + 0).IconName
+                error_message = session.findById("wnd[0]/usr").FindByNameEx("SAPLMIGOTV_GOITEM", 80).Rows(CurrentRow)(col_log_level + 0).Tooltip  'IconName: S_TL_R, S_TL_G, Tooltip: the text maybe truncated
+                material = session.findById("wnd[0]/usr").FindByNameEx("SAPLMIGOTV_GOITEM", 80).Rows(CurrentRow)(col_mat_no + 0).Text
+                Description = session.findById("wnd[0]/usr").FindByNameEx("SAPLMIGOTV_GOITEM", 80).Rows(CurrentRow)(col_mat_desc + 0).Text
                 If item_msg_icon = "S_TL_R" Then   ' error message
                     If InStr(error_message, "Deficit") > 0 Then   'no enough stock case
                         consumed_qty = get_consumed_qty(material, 0, required_qty)
                         If consumed_qty <> -1000 Then
-                            session.findById("wnd[0]/usr").findByName("SAPLMIGOTV_GOITEM", "GuiTableControl").Rows(CurrentRow)(col_mat_desc + 0).SetFocus
+                            session.findById("wnd[0]/usr").FindByNameEx("SAPLMIGOTV_GOITEM", 80).Rows(CurrentRow)(col_mat_desc + 0).SetFocus
                             session.findById("wnd[0]").sendVKey 2   'double click to jump to material master
                             session.findById("wnd[0]/usr/tabsTABSPR1/tabpSP29").Select   'click the storage location stock tab page
-                            actual_qty = session.findById("wnd[0]/usr").findByName("MARD-LABST", "GuiTextField").Text + 0  'get the storage locations unrestricted quantity +0 to force convert to number
+                            actual_qty = session.findById("wnd[0]/usr").FindByNameEx("MARD-LABST", 31).Text + 0  'get the storage locations unrestricted quantity +0 to force convert to number
                             session.findById("wnd[0]/tbar[0]/btn[3]").press  'BACK from MM03 to MIGO
                             actual_qty = actual_qty - consumed_qty
                         Else
@@ -216,18 +217,18 @@ Sub MIGO()
                         End If
                         If actual_qty > 0 Then
                             If actual_qty < qty Then
-                                session.findById("wnd[0]/usr").findByName("SAPLMIGOTV_GOITEM", "GuiTableControl").Rows(CurrentRow)(col_mat_qty + 0).Text = actual_qty
+                                session.findById("wnd[0]/usr").FindByNameEx("SAPLMIGOTV_GOITEM", 80).Rows(CurrentRow)(col_mat_qty + 0).Text = actual_qty
                             Else
                                 actual_qty = qty
                             End If
                         Else
                             actual_qty = 0
-                            session.findById("wnd[0]/usr").findByName("SAPLMIGOTV_GOITEM", "GuiTableControl").Rows(CurrentRow)(col_item_ok + 0).Selected = False 'item OK
+                            session.findById("wnd[0]/usr").FindByNameEx("SAPLMIGOTV_GOITEM", 80).Rows(CurrentRow)(col_item_ok + 0).Selected = False 'item OK
                             'in case the item OK can not be changed from the grid row, locate the item by item no and switch to item detail screen to untick item OK accordingly
-                            If session.findById("wnd[0]/usr").findByName("SAPLMIGOTV_GOITEM", "GuiTableControl").Rows(CurrentRow)(col_item_ok + 0).Selected = True Then
-                                session.findById("wnd[0]/usr").findByName("GODYNPRO-DETAIL_ZEILE", "GuiTextField").Text = session.findById("wnd[0]/usr").findByName("SAPLMIGOTV_GOITEM", "GuiTableControl").Rows(CurrentRow)(0).Text
-                                session.findById("wnd[0]/usr").findByName("OK_LOCATE", "GuiButton").press
-                                session.findById("wnd[0]/usr").findByName("GODYNPRO-DETAIL_TAKE", "GuiComboBoxControl").Selected = False  'item OK
+                            If session.findById("wnd[0]/usr").FindByNameEx("SAPLMIGOTV_GOITEM", 80).Rows(CurrentRow)(col_item_ok + 0).Selected = True Then
+                                session.findById("wnd[0]/usr").FindByNameEx("GODYNPRO-DETAIL_ZEILE", 31).Text = session.findById("wnd[0]/usr").FindByNameEx("SAPLMIGOTV_GOITEM", 80).Rows(CurrentRow)(0).Text
+                                session.findById("wnd[0]/usr").FindByNameEx("OK_LOCATE", 40).press
+                                session.findById("wnd[0]/usr").FindByNameEx("GODYNPRO-DETAIL_TAKE", 128).Selected = False  'item OK
                                 session.findById("wnd[0]").sendVKey 0
                             End If
                             error_message = "No stock available for GI"
@@ -235,12 +236,12 @@ Sub MIGO()
                     Else  'non deficit stock error, can not be handled by the script
                         actual_qty = 0
                         If CurrentRow = 0 Then 'for the very first row, item ok can not be changed in grid, instead check at item detail only
-                            session.findById("wnd[0]/usr").findByName("GODYNPRO-DETAIL_ZEILE", "GuiTextField").Text = session.findById("wnd[0]/usr").findByName("SAPLMIGOTV_GOITEM", "GuiTableControl").Rows(CurrentRow)(0).Text
-                            session.findById("wnd[0]/usr").findByName("OK_LOCATE", "GuiButton").press
-                            session.findById("wnd[0]/usr").findByName("GODYNPRO-DETAIL_TAKE", "GuiComboBoxControl").Selected = False  'item OK
+                            session.findById("wnd[0]/usr").FindByNameEx("GODYNPRO-DETAIL_ZEILE", 31).Text = session.findById("wnd[0]/usr").FindByNameEx("SAPLMIGOTV_GOITEM", 80).Rows(CurrentRow)(0).Text
+                            session.findById("wnd[0]/usr").FindByNameEx("OK_LOCATE", 40).press
+                            session.findById("wnd[0]/usr").FindByNameEx("GODYNPRO-DETAIL_TAKE", 128).Selected = False  'item OK
                             session.findById("wnd[0]").sendVKey 0
                         Else
-                            session.findById("wnd[0]/usr").findByName("SAPLMIGOTV_GOITEM", "GuiTableControl").Rows(CurrentRow)(col_item_ok + 0).Selected = False 'item OK
+                            session.findById("wnd[0]/usr").FindByNameEx("SAPLMIGOTV_GOITEM", 80).Rows(CurrentRow)(col_item_ok + 0).Selected = False 'item OK
                         End If
                     End If
                 ElseIf item_msg_icon = "" Then
@@ -253,12 +254,11 @@ Sub MIGO()
                     End If
                 End If
                 k = k + 1
-                Cells(k, 1) = prod_order
-                Cells(k, 2) = session.findById("wnd[0]/usr").findByName("SAPLMIGOTV_GOITEM", "GuiTableControl").Rows(CurrentRow)(0).Text       'item
-                Cells(k, 3) = material                                                                                                         'material
-                Cells(k, 4) = qty                                                                                                              ' required quantity
-                Cells(k, 5) = actual_qty                                                                                                       'issued quantity
-                Cells(k, 6) = error_message
+                Cells(k, 1) = material                                                                                                         'material
+                Cells(k, 2) = Description
+                Cells(k, 3) = qty                                                                                                              ' required quantity
+                Cells(k, 4) = actual_qty                                                                                                       'issued quantity
+                Cells(k, 5) = error_message
             End If ' if qty <> ""
         Next j
         session.findById("wnd[0]/tbar[0]/btn[11]").press   'save
@@ -283,9 +283,11 @@ Sub MIGO()
         If InStr(result, "Material document ") > 0 Then  'Material document 5014695540 posted
             status_strings = Split(result, " ")
             material_document = status_strings(UBound(status_strings) - 1)
-            Cells(k, 7).Value = result
+            Call combine_material
+            last_row = ActiveSheet.UsedRange.Rows.Count
+            Cells(last_row + 2, 1).Value = "Document Status:" & result
         Else
-            Cells(k, 7).Value = "failed , reason:" & result + " " + error_result
+            Cells(k + 2, 1).Value = "Document Status:" & "failed reason:" & result + " " + error_result
         End If
 ContinueNext_Order:
         material_stock.RemoveAll
@@ -317,7 +319,14 @@ Function get_consumed_qty(material As String, ByVal required_qty As Double, ByVa
 End Function
 
 Sub setup_print_format()
-    Range("A1:G1").Select
+    Range("A1,A2,D2").Font.Bold = True
+    Range("A2,D2").HorizontalAlignment = xlRight
+    Range("B2,E2").HorizontalAlignment = xlLeft
+    Range("A1:E1").Select
+    Selection.Merge
+    Selection.HorizontalAlignment = xlCenter
+    Selection.Font.Size = 16
+    Range("A3:E3").Select
     With Selection
         .WrapText = True
         .HorizontalAlignment = xlCenter
@@ -325,21 +334,116 @@ Sub setup_print_format()
         .RowHeight = 25
         .Font.Bold = True
     End With
-    Columns("A:E").ColumnWidth = 8
-    Columns("B:B").ColumnWidth = 5
-    Columns("F:F").ColumnWidth = 30
-    Columns("G:G").ColumnWidth = 20
-    Columns("G:G").WrapText = True
-    
-    Range("F:F").Select
-    With Selection
-        .WrapText = True
-    End With
+    Columns("A:A").ColumnWidth = 8
+    Columns("B:B").ColumnWidth = 34
+    Columns("C:D").ColumnWidth = 8
+    Columns("E:E").ColumnWidth = 38
+    Columns("E:E").WrapText = True
     Range("A1").Select
     With ActiveSheet.PageSetup
-        .PrintTitleRows = "$1:$1"
+        .PrintTitleRows = "$1:$3"
         .CenterFooter = "Page &P of &N"
         .Orientation = xlPortrait
         .PrintGridlines = True
+        'narrow margin
+        .LeftMargin = Application.InchesToPoints(0.35)
+        .RightMargin = Application.InchesToPoints(0.25)
+        .TopMargin = Application.InchesToPoints(0.75)
+        .BottomMargin = Application.InchesToPoints(0.75)
+        .HeaderMargin = Application.InchesToPoints(0.3)
+        .FooterMargin = Application.InchesToPoints(0.3)
     End With
+End Sub
+
+Sub combine_material()
+    Dim lastrow As Long
+    
+    lastrow = ActiveSheet.UsedRange.Rows.Count  'first sort by material column
+    Range("A4:E" & lastrow).Sort key1:=Range("A4:E" & lastrow), _
+        order1:=xlAscending, Header:=xlNo
+    last_material = ""
+    last_row = 0
+
+    For i = 4 To ActiveSheet.UsedRange.Rows.Count      'combine qty and processing log, and delete the duplicate rows
+        If Cells(i, 1) = "" Then
+            Exit For
+        End If
+        If Cells(i, 1) <> last_material Then
+            last_material = Cells(i, 1)
+            last_row = i
+        Else
+            Cells(last_row, 3) = Cells(last_row, 3) + Cells(i, 3)
+            Cells(last_row, 4) = Cells(last_row, 4) + Cells(i, 4)
+            If InStr(Cells(last_row, 5).Text, Cells(i, 5).Text) = 0 Then
+                Cells(last_row, 5) = Cells(last_row, 5) & ";" & Cells(i, 5)
+            End If
+            Cells(i, 6) = "delete"
+        End If
+    Next i
+    Call Delete_duplicate_material_rows
+    Call add_frame
+End Sub
+
+Sub Delete_duplicate_material_rows()
+    Dim Rng As Range
+    Dim Rng_Del As Range
+    'Apply autofilter to data rage
+    'Note: data must start in cell A1 for this macro to work
+    lastrow = ActiveSheet.UsedRange.Rows.Count
+    Set Rng = Range("A3:F" & lastrow).CurrentRegion
+    If ActiveSheet.AutoFilterMode = True Then
+        ActiveSheet.AutoFilter.ShowAllData
+    End If
+    Rng.AutoFilter field:=6, Criteria1:="delete"
+    'Delete visible rows assuming there’s nothing else below the last row
+    Rng.Offset(1, 0).SpecialCells(xlCellTypeVisible).EntireRow.Delete
+    ActiveSheet.AutoFilterMode = False
+End Sub
+
+
+Sub add_frame()
+'
+' add_frame Macro
+'
+    lastrow = ActiveSheet.UsedRange.Rows.Count
+    Range("A2:E" & lastrow).Select
+    Selection.Borders(xlDiagonalDown).LineStyle = xlNone
+    Selection.Borders(xlDiagonalUp).LineStyle = xlNone
+    With Selection.Borders(xlEdgeLeft)
+        .LineStyle = xlContinuous
+        .ColorIndex = 0
+        .TintAndShade = 0
+        .Weight = xlThin
+    End With
+    With Selection.Borders(xlEdgeTop)
+        .LineStyle = xlContinuous
+        .ColorIndex = 0
+        .TintAndShade = 0
+        .Weight = xlThin
+    End With
+    With Selection.Borders(xlEdgeBottom)
+        .LineStyle = xlContinuous
+        .ColorIndex = 0
+        .TintAndShade = 0
+        .Weight = xlThin
+    End With
+    With Selection.Borders(xlEdgeRight)
+        .LineStyle = xlContinuous
+        .ColorIndex = 0
+        .TintAndShade = 0
+        .Weight = xlThin
+    End With
+    With Selection.Borders(xlInsideVertical)
+        .LineStyle = xlContinuous
+        .ColorIndex = 0
+        .TintAndShade = 0
+        .Weight = xlThin
+    End With
+    With Selection.Borders(xlInsideHorizontal)
+        .LineStyle = xlContinuous
+        .ColorIndex = 0
+        .TintAndShade = 0
+        .Weight = xlThin
+    End With
+    Range("C7").Select
 End Sub
