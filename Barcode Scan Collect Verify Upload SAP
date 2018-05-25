@@ -1,0 +1,569 @@
+'keydown event on textbox not work under win10, form keypress will not be triggered if there is input control with tabstop set as True
+Public sPubInTxt As String
+Private Sub UserForm_KeyPress(ByVal KeyAscii As MSForms.ReturnInteger)
+    Dim material As String
+    Dim sn As String
+    Dim revision As String
+    label_material = ""
+    label_sn = ""
+    Label_revision = ""
+    label_status = ""
+    label_msg = ""
+    
+    Select Case KeyAscii
+        Case 123  ' prefix {
+                sPubInTxt = ""
+                'Me.chkSound.SetFocus
+                Exit Sub
+        Case 125  ' suffix }
+                'PubFunc_Mis_ConvertBarCode
+                Call Module4.parse_barcode_v1(sPubInTxt, material, sn, revision)
+                KeyAscii = 0
+                sPubInTxt = ""
+        Case Else
+                sPubInTxt = sPubInTxt & Chr(KeyAscii)
+                Exit Sub
+    End Select
+    
+    If material <> "" And sn <> "" Then   'inner/product label without revision
+        label_material.Caption = material
+        label_sn.Caption = sn
+        Label_revision = revision
+        Set found = ActiveSheet.Columns("B").Find(What:=material, LookIn:=xlValues, LookAt:=xlWhole, SearchOrder:=xlByRows, SearchDirection:=xlNext, MatchCase:=False, SearchFormat:=False)
+        If found Is Nothing Then
+            label_msg.Caption = "Scanned material not in Excel List"
+        Else
+            'set formula for column D and F
+            If Cells(found.row, 4).Formula = "" Then
+                Cells(found.row, 4).Formula = "=scanned_qty(E" & CStr(found.row) & ")"
+                Cells(found.row, 6).Formula = "=IF(D" & CStr(found.row) & ">=C" & CStr(found.row) & "," & Chr(34) & "OK" & Chr(34) & "," & Chr(34) & Chr(34) & ")"
+            End If
+            If InStr(Cells(found.row, 5), sn) > 0 Then 'already scanned
+                label_msg.Caption = "SN:" & sn & " already scanned for sales order:" & Cells(found.row, 1) & " at row:" & CStr(found.row)
+                Set found = Nothing
+            Else
+                If Cells(found.row, 4) >= Cells(found.row, 3) Then 'if found the item, keep the status and exit
+                    Set initialfound = found
+                    Do
+                        Set found = ActiveSheet.Columns("B").FindNext(After:=found)
+                        If Not found Is Nothing Then
+                            If found.Address = initialfound.Address Then  'if back to initial found, exit
+                                'If Cells(found.row, 4) >= Cells(found.row, 3) Then
+                                    Set found = Nothing
+                                    label_msg = "Scanned qty more than required"
+                                'End If
+                                Exit Do 'handle the case of only 1 line found
+                            Else
+                                If InStr(Cells(found.row, 5), sn) > 0 And sn <> "na" Then 'already scanned
+                                    label_msg.Caption = "SN:" & sn & " already scanned for sales order:" & Cells(found.row, 1) & " at row:" & CStr(found.row)
+                                    Set found = Nothing
+                                    Exit Do
+                                ElseIf Cells(found.row, 4) < Cells(found.row, 3) Then 'if found the item, keep the status and exit
+                                    If Cells(found.row, 4).Formula = "" Then
+                                        Cells(found.row, 4).Formula = "=scanned_qty(E" & CStr(found.row) & ")"
+                                        Cells(found.row, 6).Formula = "=IF(D" & CStr(found.row) & ">=C" & CStr(found.row) & "," & Chr(34) & "OK" & Chr(34) & "," & Chr(34) & Chr(34) & ")"
+                                    End If
+                                    Exit Do
+                                End If
+                            End If
+                        Else
+                            Exit Do
+                        End If
+                    Loop
+                End If
+            End If
+        End If
+        If found Is Nothing Then
+            label_status.Caption = " Scan not OK"
+        Else
+            If Cells(found.row, 5) = "" Then
+                Cells(found.row, 5) = sn
+            Else
+                Cells(found.row, 5) = Cells(found.row, 5) & ";" & sn
+            End If
+            If revision <> "" Then
+                    Cells(found.row, 5) = Cells(found.row, 5) & "[" & revision & "]"
+            End If
+            label_status.Caption = " Scanned OK"
+        End If
+        single_log = Now() & " PN:" & material & ";SN:" & sn & ";Rev:" & revision & ";" & label_msg.Caption
+        If label_status.Caption = " Scanned OK" Then
+            scan_log_ok.Text = single_log & vbCrLf & scan_log_ok.Text
+        Else
+            scan_log_error.Text = single_log & vbCrLf & scan_log_error.Text
+        End If
+    Else
+        scan_log_error.Text = "invalid barcode"
+    End If
+End Sub
+
+Private Sub UserForm_Initialize()
+   Cells(1, 1).Activate   'fix the problem of the 1st time focus of the text box
+End Sub
+
+
+Public sPubInTxt As String
+Private Sub UserForm_KeyPress(ByVal KeyAscii As MSForms.ReturnInteger)
+    Dim material As String
+    Dim sn As String
+    Dim revision As String
+    label_material = ""
+    label_sn = ""
+    Label_revision = ""
+    label_status = ""
+    label_msg = ""
+    
+    Select Case KeyAscii
+        Case 123 ' prefix {
+                sPubInTxt = ""
+                'Me.chkSound.SetFocus
+                Exit Sub
+        Case 125  ' suffix }
+                'PubFunc_Mis_ConvertBarCode
+                Call Module4.parse_barcode_v1(sPubInTxt, material, sn, revision)
+                KeyAscii = 0
+                sPubInTxt = ""
+        Case Else
+                sPubInTxt = sPubInTxt & Chr(KeyAscii)
+                Exit Sub
+    End Select
+    Cells(1, 1).Activate
+    If material <> "" And sn <> "" Then   'inner/product label without revision
+        label_material.Caption = material
+        label_sn.Caption = sn
+        Label_revision = revision
+        'Range("B3").Activate
+        Set found = ActiveSheet.Columns("B").Find(What:=material, LookIn:=xlValues, LookAt:=xlWhole, SearchOrder:=xlByRows, SearchDirection:=xlNext, MatchCase:=False, SearchFormat:=False)
+        If found Is Nothing Then
+            label_msg.Caption = "Scanned material not in Excel List"
+        Else
+            If Cells(found.row, 7).Formula = "" Then
+                Cells(found.row, 7).Formula = "=scanned_qty(H" & CStr(found.row) & ")"
+                Cells(found.row, 9).Formula = "=IF(G" & CStr(found.row) & ">=D" & CStr(found.row) & "," & Chr(34) & "OK" & Chr(34) & "," & Chr(34) & Chr(34) & ")"
+            End If
+            If InStr(Cells(found.row, 5), sn) = 0 Then 'not previously scanned
+                Set initialfound = found
+                Do
+                    Set found = ActiveSheet.Columns("B").FindNext(After:=found)
+                    If Not found Is Nothing Then
+                        If found.Address = initialfound.Address Then  'if back to initial found, exit
+                            Set found = Nothing
+                            label_msg = "SN is not in column E (SN issued by Warehouse) "
+                            Exit Do 'handle the case of only 1 line found
+                        Else
+                            If InStr(Cells(found.row, 5), sn) > 0 Then 'already scanned
+                                If Cells(found.row, 7).Formula = "" Then
+                                    Cells(found.row, 7).Formula = "=scanned_qty(H" & CStr(found.row) & ")"
+                                    Cells(found.row, 9).Formula = "=IF(G" & CStr(found.row) & ">=D" & CStr(found.row) & "," & Chr(34) & "OK" & Chr(34) & "," & Chr(34) & Chr(34) & ")"
+                                End If
+                                Exit Do
+                            End If
+                        End If
+                    'Else
+                    '    Exit Do
+                    End If
+                Loop
+            End If
+        End If
+        If found Is Nothing Then
+            label_status.Caption = " Scan not OK"
+        Else
+            If InStr(Cells(found.row, 8), sn) > 0 And sn <> "na" Then 'already scanned
+                label_msg = "SN:" & sn & " already scanned for sales order:" & Cells(found.row, 1) & " at row:" & CStr(found.row)
+                label_status.Caption = " Scan not OK"
+            Else
+                label_status.Caption = " Scanned OK"
+                If Cells(found.row, 8) = "" Then   'combine SN and revision level like this:1234[01]
+                    Cells(found.row, 8) = sn
+                Else
+                    Cells(found.row, 8) = Cells(found.row, 8) & ";" & sn
+                   
+                End If
+                If revision <> "" Then
+                        Cells(found.row, 8) = Cells(found.row, 8) & "[" & revision & "]"
+                End If
+            End If
+        End If
+        single_log = Now() & " PN:" & material & ";SN:" & sn & ";Rev:" & revision & ";" & label_msg.Caption
+        If label_status.Caption = " Scanned OK" Then
+            scan_log_ok.Text = single_log & vbCrLf & scan_log_ok.Text
+        Else
+            scan_log_error.Text = single_log & vbCrLf & scan_log_error.Text
+        End If
+    Else
+        label_msg = "Invalid barcode label, please kindly refer to the user guide for qualified barcode label"
+    End If  'end of valid material scanned
+End Sub
+
+Private Sub UserForm_Initialize()
+   Cells(1, 1).Activate   'fix the problem of the 1st time focus of the text box
+End Sub
+
+Sub zmt1_by_orders()
+     Set SapGuiAuto = GetObject("SAPGUI")  'Get the SAP GUI Scripting object
+     Set SAPApp = SapGuiAuto.GetScriptingEngine 'Get the currently running SAP GUI
+     SAPApp.AllowSystemMessages = False
+     SAPApp.HistoryEnabled = False  'improve the performance
+     Set SAPCon = SAPApp.Children(0) 'Get the first system that is currently connected
+     Set session = SAPCon.Children(0) 'Get the first session (window) on that connection
+          
+     Dim material, revision As String         'handling the prefix 0 when needed
+         
+     lastrow = ActiveSheet.UsedRange.Rows.Count  'first sort by Sales order column
+     Range("A3:F" & lastrow).Sort key1:=Range("A3:I" & lastrow), order1:=xlAscending, Header:=xlNo
+     Range("J3:Q" & lastrow).Clear     'clear the previous run result
+     If Cells(3, 8) <> "" Then  'try to use verfied 2nd time scanned sn as data source, otherwise use the first time scanned sn
+        sn_col = 8
+     Else
+        sn_col = 5
+     End If
+     For i = 3 To lastrow
+        If Cells(i, 1) = "" Then  'if encounter blank sales order row, exit processing
+            Exit For
+        End If
+               
+        If Cells(i, 1) <> Cells(i - 1, 1) Then  'the first sales order row
+            session.findById("wnd[0]").maximize
+            session.findById("wnd[0]/tbar[0]/okcd").Text = "/nzmt1"
+            session.findById("wnd[0]").sendVKey 0
+            session.findById("wnd[0]/usr/radRADIO2").Select
+            session.findById("wnd[0]").sendVKey 0
+            session.findById("wnd[0]/usr/txtZMZWP-ZAUFTRAGSN").Text = Cells(i, 1) ' sales order
+            session.findById("wnd[0]").sendVKey 0
+            On Error Resume Next
+                session.findById("wnd[1]/tbar[0]/btn[0]").press
+            If session.findById("wnd[0]/sbar").MessageType = "E" Or session.findById("wnd[0]/sbar").MessageType = "A" Then   ' handle error cases
+                order_message = session.findById("wnd[0]/sbar").Text
+                Cells(i, 14) = order_message
+                If order_message = "No TD-relevant item/position found" Then    'non ZMT1 relevant order, directly mark as OK
+                    Cells(i, 13) = "OK"    'ZMT1 input status
+                End If
+                GoTo nextrow
+            End If
+            session.findById("wnd[0]/tbar[1]/btn[5]").press   'switch to change mode
+            On Error Resume Next  'Order already released, changed necessary popup window
+                session.findById("wnd[1]/tbar[0]/btn[0]").press
+            If session.findById("wnd[0]/usr/txtZMAUF-ZSTATUS").Text = "" _
+                And session.findById("wnd[0]/usr/sub:ZMTDD000:9210/txtZMZWP-ZPOS_STAT[" & CStr(0) & ",72]").Text <> "OKAY" Then   'when first time processing the order, tick all items to
+                session.findById("wnd[0]/tbar[1]/btn[9]").press    'select ALL to bypass all the items first
+            End If
+            sales_order_processed_ok = False
+            changed = False
+            For j = 1 To 999 Step 2
+                On Error Resume Next   'if cannot find valid field and even after page down, then reached the final row
+                    session.findById ("wnd[0]/usr/sub:ZMTDD000:9210/txtZMZWP-ZSERIALNR[" & CStr(j) & ",13]")
+                If Err.Number <> 0 Then
+                    previous_page_1st_sn = session.findById("wnd[0]/usr/sub:ZMTDD000:9210/txtZMZWP-ZSERIALNR[1,13]").Text
+                    session.findById("wnd[0]/tbar[0]/btn[82]").press   ' click the next page button
+                    If session.findById("wnd[0]/usr/sub:ZMTDD000:9210/txtZMZWP-ZSERIALNR[1,13]").Text = previous_page_1st_sn Then
+                        Exit For
+                    End If
+                End If
+                If session.findById("wnd[0]/usr/sub:ZMTDD000:9210/txtZMZWP-ZPOS_STAT[" & CStr(j - 1) & ",72]").Text <> "OKAY" Then  'overwrite the none OKAY item only
+                    found_material = False
+                    For m = i To i + 99
+                        If Cells(m, 1) <> Cells(i, 1) Then  'already sort by sales order and material, only search within the same sales order
+                            Exit For
+                        End If
+                        material = Cells(m, 2).Text   'need to convert to string,
+                        If Len(material) = 7 Then
+                            material = "0" & material
+                        End If
+                        
+                        If field_material.Text = material Then
+                        
+                            If Cells(m, 12).Formula = "" Then 'setup formula
+                                Cells(m, sn_col - 1).Formula = "=scanned_qty(H" & CStr(m) & ")"
+                                Cells(m, 12).Formula = "=scanned_qty(J" & CStr(m) & ")"
+                                Cells(m, 13).Formula = "=IF(L" & CStr(m) & ">=G" & CStr(m) & "," & Chr(34) & "OK" & Chr(34) & "," & Chr(34) & Chr(34) & ")"
+                            End If
+                            
+                            input_qty = UBound(Split(add_sn(Cells(m, 10), Cells(m, 11)), ";")) + 1
+                            If input_qty < Cells(m, sn_col - 1) Then 'not all SN already enter/input into ZMT1, in other word, SN available for input
+                                found_material = True
+                                sn = Split(Cells(m, sn_col), ";")(input_qty)   'here the input qty is the index of array(split)
+                                special_char_index = InStr(sn, "[")
+                                If special_char_index = 0 Then   ' format of sn and revision: 1234[01]
+                                    revision = ""
+                                Else
+                                    revision = Mid(sn, special_char_index + 1, 2)
+                                    'If InStr(sn, "]") > 0 Then 'handle the empty revision level case
+                                    '    revision = ""
+                                    'End If
+                                    sn = Left(sn, special_char_index - 1)
+                                End If
+                                If input_qty + 1 >= Cells(m, 4) And Cells(m + 1, 1) <> Cells(m, 1) Then '
+                                    sales_order_processed_ok = True
+                                End If
+                                Exit For
+                            End If
+                        End If
+                    Next m
+                    If found_material = True Then
+                        
+                        session.findById("wnd[0]/usr/sub:ZMTDD000:9210/chkZMZWP-ZFEHLT_KZ[" & CStr(j) & ",1]").Selected = False
+                        session.findById("wnd[0]/usr/sub:ZMTDD000:9210/txtZMZWP-ZSERIALNR[" & CStr(j) & ",13]").Text = sn  'serial number
+                        If (session.findById("wnd[0]/usr/sub:ZMTDD000:9210/txtZMZWP-ZES[" & CStr(j) & ",48]").Changeable = True And revision <> "") Then
+                            session.findById("wnd[0]/usr/sub:ZMTDD000:9210/txtZMZWP-ZES[" & CStr(j) & ",48]").Text = revision    ' revision level, version
+                        End If
+                        session.findById("wnd[0]").sendVKey 0
+                        If Cells(m, 14) = "" Then
+                            Cells(m, 14) = session.findById("wnd[0]/sbar").Text
+                        Else
+                            Cells(m, 14) = Cells(m, 14) & vbCrLf & session.findById("wnd[0]/sbar").Text
+                        End If
+                        If session.findById("wnd[0]/sbar").MessageType = "E" Or session.findById("wnd[0]/sbar").MessageType = "A" Then  'ignore the error item by Tick item
+                            session.findById("wnd[0]/usr/sub:ZMTDD000:9210/chkZMZWP-ZFEHLT_KZ[" & CStr(j) & ",1]").Selected = True
+                            session.findById("wnd[0]/usr/sub:ZMTDD000:9210/txtZMZWP-ZSERIALNR[" & CStr(j) & ",13]").Text = ""
+                            session.findById("wnd[0]/usr/sub:ZMTDD000:9210/txtZMZWP-ZES[" & CStr(j) & ",48]").Text = ""
+                            session.findById("wnd[0]").sendVKey 0
+                            Cells(m, 11) = add_sn(Cells(m, 11), sn & "[" & revision & "]")
+                        Else
+                            Cells(m, 10) = add_sn(Cells(m, 10), sn & "[" & revision & "]")
+                            changed = True
+                        End If
+                    End If
+                    If sales_order_processed_ok = True Then  'finished processing the same sales order
+                        Exit For
+                    End If
+                End If
+            Next j
+            If changed = True Then   'finally SAVE
+                Status = session.findById("wnd[0]/usr/txtZMAUF-ZSTATUS").Text
+                session.findById("wnd[0]/tbar[0]/btn[11]").press
+                order_message = session.findById("wnd[1]").PopupDialogText
+                session.findById("wnd[1]").Close
+                session.findById("wnd[0]/usr/txtZMZWP-ZAUFTRAGSN").Text = Cells(i, 1) '"6997880"
+                session.findById("wnd[0]/tbar[1]/btn[7]").press   'release ZMT1
+                If session.findById("wnd[0]/sbar").MessageType = "E" Then  ' handle error cases
+                    order_message = order_message & ";" & session.findById("wnd[0]/sbar").Text
+                Else
+                    On Error Resume Next
+                        session.findById("wnd[1]/tbar[0]/btn[0]").press
+                    If Err.Number = 0 Then
+                        msg = "; ZMT1 Released OK!"
+                        order_message = order_message & " " & msg
+                    End If
+                End If
+            Else
+                order_message = "Sales order not changed due to item errors"
+            End If
+        End If
+        If Cells(i, 1) <> Cells(i + 1, 1) Then  'have the feedback output to the last sales order row
+            Cells(i, 15) = order_message
+        End If
+nextrow:
+    Next i
+    
+    Set session = Nothing
+    Set Connection = Nothing
+    SAPApp.AllowSystemMessages = True
+    SAPApp.HistoryEnabled = True  'improve the performance
+    Set SAPApp = Nothing
+    Set SapGuiAuto = Nothing
+    MsgBox "Process completed"
+End Sub
+
+Function add_sn(ByRef existing_sn As String, ByVal new_sn As String)
+    If existing_sn = "" Then
+        add_sn = new_sn
+    Else
+        If new_sn = "" Then
+            add_sn = existing_sn
+        Else
+            add_sn = existing_sn + ";" + new_sn
+        End If
+    End If
+End Function
+
+Function scanned_qty(sn As String)
+    scanned_qty = UBound(Split(sn, ";")) + 1
+End Function
+
+Sub parse_barcode(ByVal scanned_text As String, ByRef material As String, ByRef sn As String, ByRef revision As String)
+    ' 2 different barcode, one inner label total length 41 without revision, the other outer label with revision total length 47 (include the beginning { exclude the ending }
+    extra_length = 0
+    material = ""
+    sn = ""
+    revision = ""
+    scanned_text = UCase(scanned_text)
+    If Left(scanned_text, 6) <> "{MODEL" Then   '
+        If Left(Right(scanned_text, 6), 3) = "422" Then   'no ending revision
+            extra_length = 7
+        End If
+        If Left(scanned_text, 1) = "{" And Mid(scanned_text, 18, 2) = "21" Then
+            If (Left(Right(scanned_text, 24 - extra_length), 3) = "240") Then
+                material_length = 8
+            ElseIf (Left(Right(scanned_text, 23 - extra_length), 3) = "240") Then
+                material_length = 7
+            End If
+            If material_length > 0 Then
+                material = Left(Right(scanned_text, 13 - extra_length + material_length), material_length)
+                sn = Mid(scanned_text, 20, Len(scanned_text) + extra_length - 35 - material_length)
+            End If
+            If Left(Right(scanned_text, 4), 2) = "20" And Left(Right(scanned_text, 13), 3) = "422" Then
+                revision = Right(scanned_text, 2)
+            End If
+        End If
+    ElseIf Left(scanned_text, 6) = "{MODEL" Then    ' inner simple label with material and qty only, like {MODEL10656189QTY1}
+        material = Mid(scanned_text, 7, InStr(scanned_text, "QTY") - 7)
+        sn = "na"
+    End If
+    If Left(scanned_text, 3) = "{1P" Then    ' supplier lable, like {1P11293210S1800592PNAQ1}
+        material = Mid(scanned_text, 4, InStr(scanned_text, "S") - 4)
+        sn = Mid(scanned_text, InStr(scanned_text, "S") + 1, InStr(scanned_text, "2P") - InStr(scanned_text, "S") - 1)
+        revision = Mid(scanned_text, InStr(scanned_text, "2P") + 2, InStr(scanned_text, "Q") - InStr(scanned_text, "2P") - 2)
+    End If
+End Sub
+
+Sub test()
+    barcode = ""
+    Dim material As String
+    Dim sn As String
+    Dim revision As String
+    
+    For i = 1 To 3
+        barcode = Cells(12, i + 4)
+        Call parse_barcode(barcode, material, sn, revision)
+        Cells(21, i) = material
+        Cells(22, i) = sn
+        Cells(23, i) = revision
+    Next i
+End Sub
+
+Sub parse_barcode_v1(ByVal scanned_text As String, ByRef material As String, ByRef sn As String, ByRef revision As String)
+  material = ""
+  sn = ""
+  revision = ""
+  scanned_text = UCase(scanned_text)
+  Select Case Left(scanned_text, 2)
+      
+    '=================== ????? GS ????? ===========================================================
+      Case "01"
+                 If Len(scanned_text) < 30 Or Len(scanned_text) > 80 Then
+                       Exit Sub
+                 End If
+    
+                 qPos1 = InStr(17, scanned_text, "21", 1)
+                 'qPos2 = InStr(23, scanned_text, "240", 1)
+                 qPos2 = InStr(15, scanned_text, "240", 1)
+                 qPos3 = InStr(33, scanned_text, "422", 1)
+                 qPos4 = InStr(qPos3 + 6, scanned_text, "20", 1)
+                
+                 If qPos1 = 0 Or qPos2 = 0 Or qPos3 = 0 Then Exit Sub
+                        
+                 sn = Mid(scanned_text, qPos1 + 2, qPos2 - qPos1 - 2)
+                 material = Mid(scanned_text, qPos2 + 3, qPos3 - qPos2 - 3)
+                 
+                 If qPos4 <> 0 Then
+                      revision = Right(scanned_text, Len(scanned_text) - qPos4 - 1)
+                 End If
+                
+    '=================== ??? SMT ?????? ===========================================================
+    
+      Case "[)"
+            
+                If Len(scanned_text) < 50 Or Len(scanned_text) > 300 Then
+                       Exit Sub
+                End If
+                
+                qPos1 = InStr(20, scanned_text, "S", 1)
+                qPos2 = InStr(30, scanned_text, "1S", 1)
+                qPos3 = InStr(60, scanned_text, "1Q", 1)
+                qPos4 = InStr(qPos3 + 3, scanned_text, "3Q", 1)
+                
+                If qPos1 = 0 Or qPos2 = 0 Or qPos3 = 0 Then Exit Sub
+                       
+                    sn = Mid(scanned_text, qPos1 + 1, qPos2 - qPos1 - 1)
+                    sPubLength = Mid(scanned_text, qPos3 + 2, qPos4 - qPos3 - 2)
+                                            
+    '=================== SSMR ?????????? ===========================================================
+                 
+    Case "MO"
+       
+                qPos1 = InStr(1, scanned_text, "MODEL", 1)
+                qPos2 = InStr(12, scanned_text, "SERIAL", 1)
+                qPos3 = InStr(12, scanned_text, "REV", 1)
+                qPos4 = InStr(12, scanned_text, "PONUM", 1)
+                qPos5 = InStr(12, scanned_text, "LOT", 1)
+                qPos6 = InStr(12, scanned_text, "QTY", 1)
+                qPos7 = InStr(12, scanned_text, "MANUFACTOR", 1)
+                qPos8 = InStr(12, scanned_text, "COIL", 1)
+                qPos9 = InStr(12, scanned_text, "LENGTH", 1)
+                
+                If qPos1 = 0 Then Exit Sub
+            
+ChkModel:
+            
+                If qPos2 <> 0 Then
+                   material = Mid(scanned_text, 6, qPos2 - 6)
+                ElseIf qPos3 <> 0 Then
+                   material = Mid(scanned_text, 6, qPos3 - 6)
+                ElseIf qPos4 <> 0 Then
+                   material = Mid(scanned_text, 6, qPos4 - 6)
+                ElseIf qPos5 <> 0 Then
+                   material = Mid(scanned_text, 6, qPos5 - 6)
+                ElseIf qPos6 <> 0 Then
+                   material = Mid(scanned_text, 6, qPos6 - 6)
+                ElseIf qPos7 <> 0 Then
+                   material = Mid(scanned_text, 6, qPos7 - 6)
+                Else
+                   material = Mid(scanned_text, 6, Len(scanned_text) - 5)
+                End If
+            
+ChkSerial:
+                   
+                If qPos2 = 0 Then
+                   GoTo ChkRev
+                End If
+                   
+                If qPos3 <> 0 Then
+                   sn = Mid(scanned_text, qPos2 + 6, qPos3 - qPos2 - 6)
+                ElseIf qPos4 <> 0 Then
+                   sn = Mid(scanned_text, qPos2 + 6, qPos4 - qPos2 - 6)
+                ElseIf qPos5 <> 0 Then
+                   sn = Mid(scanned_text, qPos2 + 6, qPos5 - qPos2 - 6)
+                ElseIf qPos6 <> 0 Then
+                   sn = Mid(scanned_text, qPos2 + 6, qPos6 - qPos2 - 6)
+                ElseIf qPos7 <> 0 Then
+                   sn = Mid(scanned_text, qPos2 + 6, qPos7 - qPos2 - 6)
+                Else
+                   sn = Mid(scanned_text, qPos2 + 6, Len(scanned_text) - qPos2 - 5)
+                End If
+                                       
+ChkRev:
+                                    
+                If qPos4 <> 0 Then
+                   revision = Mid(scanned_text, qPos3 + 3, qPos4 - qPos3 - 3)
+                ElseIf qPos5 <> 0 Then
+                   revision = Mid(scanned_text, qPos3 + 3, qPos5 - qPos3 - 3)
+                ElseIf qPos6 <> 0 Then
+                   revision = Mid(scanned_text, qPos3 + 3, qPos6 - qPos3 - 3)
+                ElseIf qPos7 <> 0 Then
+                   revision = Mid(scanned_text, qPos3 + 3, qPos7 - qPos3 - 3)
+                Else
+                   revision = Mid(scanned_text, qPos3 + 3, Len(scanned_text) - qPos3 - 2)
+                End If
+    
+    '=================== CVME PCBA ??? ===================================================================
+       
+       Case "1P"
+        
+                If Len(scanned_text) < 13 Or Len(scanned_text) > 50 Then
+                       Exit Sub
+                End If
+                
+                qPos1 = InStr(1, scanned_text, "1P", 1)
+                qPos2 = InStr(9, scanned_text, "S", 1)
+    
+                If qPos1 = 0 Or qPos2 = 0 Then
+                     Exit Sub
+                End If
+                        
+                sn = Mid(scanned_text, qPos2 + 1, Len(scanned_text) - qPos2)
+                material = Mid(scanned_text, qPos1 + 2, qPos2 - qPos1 - 2)
+    End Select
+    If sn = "" Then
+        sn = "na"
+    End If
+End Sub
