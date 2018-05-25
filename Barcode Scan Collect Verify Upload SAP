@@ -457,9 +457,7 @@ Sub parse_barcode_v1(ByVal scanned_text As String, ByRef material As String, ByR
                  
                  If qPos4 <> 0 Then
                       revision = Right(scanned_text, Len(scanned_text) - qPos4 - 1)
-                 End If
-                
-    '=================== ??? SMT ?????? ===========================================================
+                 End If                
     
       Case "[)"
             
@@ -475,9 +473,7 @@ Sub parse_barcode_v1(ByVal scanned_text As String, ByRef material As String, ByR
                 If qPos1 = 0 Or qPos2 = 0 Or qPos3 = 0 Then Exit Sub
                        
                     sn = Mid(scanned_text, qPos1 + 1, qPos2 - qPos1 - 1)
-                    sPubLength = Mid(scanned_text, qPos3 + 2, qPos4 - qPos3 - 2)
-                                            
-    '=================== SSMR ?????????? ===========================================================
+                    sPubLength = Mid(scanned_text, qPos3 + 2, qPos4 - qPos3 - 2)                                            
                  
     Case "MO"
        
@@ -544,8 +540,6 @@ ChkRev:
                 Else
                    revision = Mid(scanned_text, qPos3 + 3, Len(scanned_text) - qPos3 - 2)
                 End If
-    
-    '=================== CVME PCBA ??? ===================================================================
        
        Case "1P"
         
