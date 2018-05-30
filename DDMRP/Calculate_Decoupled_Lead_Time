@@ -1,0 +1,93 @@
+Public sheet_bom As Worksheet
+Public sheet_bom_item As Worksheet
+Public sheet_item As Worksheet
+Public found As Range
+
+Sub setup_sheets_obj()
+    Set sheet_bom = Sheets("BOM_Header")
+    Set sheet_bom_item = Sheets("BOM_Item")
+    Set sheet_item = Sheets("Item")
+End Sub
+
+Function get_longest_path(ByVal material, ByVal run_uuid):
+    bom_item_row = findValueRow(sheet_bom_item, "A", material)
+    If bom_item_row = 0 Then
+        get_longest_path = 0
+    Else
+        For i = bom_item_row To 999
+            item_row = findValueRow(sheet_item, "A", sheet_bom_item.Cells(i, 2))
+            If sheet_item.Cells(item_row, 3) = "" Or _
+                InStr("Replenished,Replenish Overwrite, Min-Max", sheet_item.Cells(item_row, 3)) = 0 Then  'non bufferred item
+                bom_row = findValueRow(sheet_bom, "A", sheet_bom_item.Cells(i, 2))
+                If bom_row > 0 Then
+                    If sheet_bom.Cells(bom_row, 3) = run_uuid Then
+                        sheet_bom_item.Cells(i, 4) = sheet_bom.Cells(bom_row, 4)
+                    Else
+                        item_row = findValueRow(sheet_item, "A", sheet_bom_item.Cells(i, 2))
+                        mfg_lead_time = sheet_item.Cells(item_row, 10)
+                        sheet_bom_item.Cells(i, 4) = mfg_lead_time
+                        sheet_bom_item.Cells(i, 4) = sheet_bom_item.Cells(i, 4) + get_longest_path(sheet_bom_item.Cells(i, 2), run_uuid)
+                        
+                        bom_row = findValueRow(sheet_bom, "A", material)
+                        sheet_bom.Cells(bom_row, 4) = sheet_bom_item.Cells(i, 4)
+                        sheet_bom.Cells(bom_row, 3) = run_uuid
+                    End If
+                Else  'without own bom, purchased part
+                    item_row = findValueRow(sheet_item, "A", sheet_bom_item(i, 2))
+                    sheet_bom_item.Cells(i, 4) = sheet_item.Cells(item_row, 11)
+                End If
+            Else
+                sheet_bom_item.Cells(i, 4) = 0    'buffer item dlt=0
+            End If
+            If sheet_bom_item.Cells(i + 1, 1) <> material Then
+                Exit For
+            End If
+        Next i
+        max_dlt = 0
+        For j = bom_item_row To i
+            If sheet_bom_item.Cells(j, 4) <> "" And sheet_bom_item.Cells(j, 4) > max_dlt Then
+                max_dlt = sheet_bom_item.Cells(j, 4)
+            End If
+        Next j
+        get_longest_path = max_dlt
+    End If
+End Function
+
+Sub calculate_decoupled_lead_time():
+    Call setup_sheets_obj
+    run_uuid = Str(Now())  ' if same uuid, get the existing value is ok, otherwise explode bom to get new value
+    For i = 2 To sheet_bom.UsedRange.Rows.Count
+        If sheet_bom.Cells(i, 3) <> run_uuid Then
+            material = sheet_bom.Cells(i, 1)  'BOM header material
+            item_row = findValueRow(sheet_item, "A", material)
+            dlt = sheet_item.Cells(item_row, 10) 'BOM header 's mfg lead time
+            dlt = dlt + get_longest_path(material, run_uuid)
+            sheet_bom.Cells(i, 4) = dlt
+            sheet_bom.Cells(i, 3) = run_uuid
+        End If
+    Next i
+End Sub
+Function findValueRow(ByVal sheetToFind As Worksheet, ByVal columnToFind As String, ByVal valueToFind As String)
+
+    Dim xlRange As Range
+    Dim xlCell As Range
+    Dim target_sheet As Worksheet
+    Dim iLastRow As Integer
+    Dim iRow As Integer
+    
+    iRow = 0
+    'Set target_sheet = Sheets(sheetToFind)
+    'target_sheet.Select
+    
+    iLastRow = sheetToFind.Range(columnToFind & ":" & columnToFind).End(xlDown).Row
+
+    Set xlRange = sheetToFind.Range(columnToFind & "2:" & columnToFind & iLastRow)
+
+    For Each xlCell In xlRange
+        If xlCell.Value = valueToFind Then
+            iRow = xlCell.Row '<-- Here is the row that the value was found on
+            Exit For
+        End If
+    Next xlCell
+    findValueRow = iRow
+End Function
