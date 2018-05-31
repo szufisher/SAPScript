@@ -59,3 +59,5 @@ SAP Script tips
 9.  considering performance, access the internal object( row, cell) of the item list instead of switch to item details, 
 the address/path to the table's active cell: tablecontrol.Rows(rowindex)(columnindex), eg. table_items.Rows(0)(4), means the first row, the 5th column
     assign variable for tablecontrol, row or column will trigger sap auto exit when switch to other transaction or popup window!!!
+    
+10.  useful video https://www.youtube.com/watch?v=oPPhA14Pm-8 explain SAPGUI script from Excel
