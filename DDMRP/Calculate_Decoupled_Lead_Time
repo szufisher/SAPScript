@@ -78,7 +78,16 @@ Function findValueRow(ByVal sheetToFind As Worksheet, ByVal columnToFind As Stri
     iRow = 0
     'Set target_sheet = Sheets(sheetToFind)
     'target_sheet.Select
-    
+    Dim findValue As Range
+  Set findValue = Worksheets("order payment sheet USD").Columns("A").Find(what:="Brighton Sample", LookIn:=xlValues, LookAt:= _
+ xlPart, SearchOrder:=xlByRows, SearchDirection:=xlNext, MatchCase:=False _
+ , MatchByte:=False, SearchFormat:=False)
+ ‘after:activecell should be removed, because the target sheet not activated
+ 解决办法如下：
+第一步：Spend工作表中Movt列，设为文本。
+第二步：双击A2单元格，再回车。（通过编辑，将会使得A2单元格出现文本标识符，即绿色小三角）
+              EXCEL SQL会自动从第一行数据智能判断数据格式，通过第二步，强制使第一行数据变成了文本型。
+第三步：存盘，即可。
     iLastRow = sheetToFind.Range(columnToFind & ":" & columnToFind).End(xlDown).Row
 
     Set xlRange = sheetToFind.Range(columnToFind & "2:" & columnToFind & iLastRow)
