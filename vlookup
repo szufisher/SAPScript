@@ -1,0 +1,117 @@
+'very simple and efficient vlookup utility
+' how to use
+' 1. put the cursor to the lookup result return column
+' 2. click the vloopup custom button available in the addin tab
+' 3. put the cursor to the to-be lookup column
+' 4. select the lookup area, make sure the first column is the lookup value, the last column is the return value, press ENTER
+' 5. Popup window displayed, choose forward or backward, the lookup result will be auto filled.
+
+Private Sub Workbook_Open()
+    Dim sCaption As String
+    l = Application.CommandBars("Worksheet Menu Bar").Controls.Count
+     For i = l To 1 Step -1
+         sCaption = Application.CommandBars("Worksheet Menu Bar").Controls(i).Caption
+         If InStr(1, UCase(sCaption), "VLOOKUP", vbTextCompare) > 0 Then
+            Exit Sub
+         End If
+     Next
+     i = Application.CommandBars("Worksheet Menu Bar").Controls.Count
+     Application.CommandBars("Worksheet Menu Bar").Controls.Add Type:= _
+         msoControlButton, ID:=2950, Before:=i + 1
+     i = Application.CommandBars("Worksheet Menu Bar").Controls.Count
+     Application.CommandBars("Worksheet Menu Bar").Controls(i).Caption = "&VLOOKUP"
+     Application.CommandBars("Worksheet Menu Bar").Controls(i).Style = msoButtonCaption
+     Application.CommandBars("Worksheet Menu Bar").Controls(i).OnAction = "'lookup_addin.xlsm'!LK"
+End Sub
+
+Private Sub Backward_Click()
+    VLK.back = True
+    Unload Backward_Forward
+End Sub
+
+Private Sub Forward_Click()
+    VLK.back = False
+    Unload Backward_Forward
+End Sub
+
+Public SH1 As Worksheet, SH2 As Worksheet, R As Long, back As Boolean, AC As Integer, AR As Long, Implement As Boolean
+ 
+ Sub LK()
+    Set SH1 = ActiveSheet
+    R = SH1.Range("a1", SH1.UsedRange).Rows.Count
+    AR = ActiveCell.Row
+    AC = ActiveCell.Column
+    Implement = False
+    If SH1.AutoFilterMode Then
+        On Error Resume Next
+        SH1.ShowAllData
+    End If
+    Application.OnKey "~", "DB"
+    Application.OnKey "{enter}", "DB"
+    Application.OnKey "{ESC}", "my_Quiet"
+ End Sub
+ 
+ Private Sub DB()
+    Dim AC1 As Integer, AC2 As Integer, n, R1, C1 As Integer, RD
+    Dim data, temp, arr, D
+    Dim i&, k&
+    
+    Application.OnKey "~"
+    Application.OnKey "{enter}"
+    Application.OnKey "{ESC}"
+    Set D = CreateObject("scripting.dictionary")
+    Set SH2 = ActiveSheet
+    AC1 = ActiveCell.Column
+    n = Selection.Columns.Count
+    AC2 = AC1 + n - 1
+    RD = SH2.Range("A1", SH2.UsedRange).Rows.Count
+    SH1.Activate
+    R1 = ActiveCell.Row
+    C1 = ActiveCell.Column
+    Backward_Forward.Show
+    If back = True Then
+        With SH2
+            data = .Range(Cells(1, AC1).Address, Cells(RD, AC2).Address)
+            For i = 1 To UBound(data)
+                D(data(i, n)) = data(i, 1)
+            Next
+        End With
+        With SH1
+            temp = .Range(Cells(R1, C1).Address, Cells(R + 1, C1).Address)
+            ReDim arr(1 To UBound(temp), 1 To 1)
+            For k = 1 To UBound(temp)
+            arr(k, 1) = D(temp(k, 1))
+            Next
+            .Range(Cells(R1, AC), Cells(R, AC)) = arr
+        End With
+        Set D = Nothing
+    Else
+        With SH2
+            data = .Range(Cells(1, AC1).Address, Cells(RD, AC2).Address)
+            For i = 1 To UBound(data)
+                D(data(i, 1)) = data(i, n)
+            Next
+        End With
+        With SH1
+            temp = .Range(Cells(R1, C1).Address, Cells(R + 1, C1).Address)
+            ReDim arr(1 To UBound(temp), 1 To 1)
+            For k = 1 To UBound(temp)
+            arr(k, 1) = D(temp(k, 1))
+            Next
+            .Range(Cells(R1, AC), Cells(R, AC)) = arr
+        End With
+        Set D = Nothing
+    End If
+    Implement = True
+    
+    MsgBox "Completed!"
+ 
+ End Sub
+ 
+ Private Sub my_Quiet()
+     If Not Implement Then
+         Application.OnKey "~"
+         Application.OnKey "{enter}"
+         Application.OnKey "{ESC}"
+     End If
+ End Sub
