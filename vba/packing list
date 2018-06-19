@@ -1,0 +1,813 @@
+ Public sh As Worksheet, W As Workbook, DA As Date, dat, KN As Integer, WW As Workbook, SS As Worksheet, WW1 As Workbook, SS1 As Worksheet
+ Sub ShowF()
+    Starting.Show 0
+ End Sub
+ Sub Start()
+    Dim SH1 As Worksheet
+    Set SH1 = ActiveSheet
+    Workbooks.Add
+    Set sh = ActiveSheet
+    Set W = ActiveWorkbook
+    DA = Application.InputBox("Please input the delivery date:")
+    sh.Range("a1") = "Delivery date:"
+    sh.Range("b1") = DA
+    sh.Range("a2") = "SO#"
+    sh.Range("B2") = "PO#"
+    sh.Range("C2") = "P/N."
+    sh.Range("D2") = "Description"
+    sh.Range("e2") = "Qty"
+    sh.Range("f2") = "SN"
+    sh.Range("G2") = "Rev."
+    sh.Range("H2") = "Coil Group"
+    sh.Range("I2") = "ark"
+    sh.Range("J2") = "From"
+    sh.Range("K2") = "Row"
+    dat = Format(DA, "YYYYMMDD")
+    On Error Resume Next
+    MkDir "D:\Shipment List\Shipment List on " & dat
+    W.SaveAs Filename:= _
+            "D:\Shipment List\Shipment List on " & dat & "\Temp.xls", FileFormat _
+            :=xlExcel8, Password:="", WriteResPassword:="", ReadOnlyRecommended:= _
+            False, CreateBackup:=False
+    SH1.Activate
+    Shipment.Show 0
+ End Sub
+
+
+ Sub CopyList()
+     Dim R As Long, R1 As Long, i As Integer, SH1 As Worksheet, n As Long, V1, V2, V3, V4, V5, V6, V7, K As Integer
+    
+     Application.ScreenUpdating = False
+     Set SH1 = ActiveSheet
+     R1 = ActiveCell.Row
+     n = Selection.Rows.Count
+     For i = R1 To R1 + n - 1
+     If SH1.Cells(i, 1) = "" Then
+     K = i
+     Do
+     K = K - 1
+     Loop Until SH1.Cells(K, 1) <> ""
+     V1 = SH1.Cells(K, 1).Value
+     V2 = SH1.Cells(K, 2).Value
+     Else
+     V1 = SH1.Cells(i, 1).Value
+     V2 = SH1.Cells(i, 2).Value
+     End If
+     V3 = SH1.Cells(i, 7).Value
+     V4 = SH1.Cells(i, 8).Value
+     V5 = SH1.Cells(i, 9).Value
+     V6 = SH1.Cells(i, 15).Value
+     V7 = SH1.Cells(i, 16).Value
+     R = sh.Range("A1", sh.UsedRange).Rows.Count
+     sh.Cells(R + 1, 1) = V1
+     sh.Cells(R + 1, 2) = V2
+     sh.Cells(R + 1, 3) = V3
+     sh.Cells(R + 1, 4) = V4
+     sh.Cells(R + 1, 5) = V5
+     sh.Cells(R + 1, 6) = V6
+     sh.Cells(R + 1, 7) = V7
+     sh.Cells(R + 1, 10) = SH1.Name
+     sh.Cells(R + 1, 11) = i
+     Next
+     Application.ScreenUpdating = True
+     MsgBox "Shipment List are copied!"
+ End Sub
+
+
+ Sub Create_DN()
+     Dim SH0 As Worksheet, W0 As Workbook, SH1 As Worksheet, W1 As Workbook, R As Long, K As Long, R1 As Long
+    
+     Application.ScreenUpdating = False
+     Set W0 = ThisWorkbook
+     Set SH0 = W0.Sheets("DN")
+     Workbooks.Add
+     Set W1 = ActiveWorkbook
+     Set SH1 = ActiveSheet
+     SH0.Activate
+     Rows("1:13").Select
+     Selection.Copy
+     SH1.Activate
+     SH1.Range("A1").Select
+     ActiveSheet.Paste
+     Application.CutCopyMode = False
+     sh.Activate
+     R = sh.Range("A1", sh.UsedRange).Rows.Count
+     K = sh.Range("I65536").End(xlUp).Row
+     sh.Range(Cells(K + 1, 1), Cells(R, 7)).Select
+     Selection.Copy
+     SH1.Activate
+     SH1.Range("B14").Select
+     Selection.PasteSpecial Paste:=xlPasteValues, Operation:=xlNone, SkipBlanks _
+             :=False, Transpose:=False
+     Application.CutCopyMode = False
+     Range("A14").Select
+     R1 = SH1.Range("A1", SH1.UsedRange).Rows.Count
+     SH1.Range("A14:A" & R1).FormulaR1C1 = "=ROW(R[-13]C)"
+     SH1.Range("A14:A" & R1).Select
+     Selection.Copy
+     Selection.PasteSpecial Paste:=xlPasteValues, Operation:=xlNone, SkipBlanks _
+             :=False, Transpose:=False
+     Application.CutCopyMode = False
+     SH1.Range("F" & R1 + 1).FormulaR1C1 = "=SUM(R[" & 13 - R1 & "]C:R[-1]C)"
+     SH0.Activate
+     Cells.Select
+     Selection.Copy
+     SH1.Activate
+     Cells.Select
+     Selection.PasteSpecial Paste:=xlPasteFormats, Operation:=xlNone, _
+         SkipBlanks:=False, Transpose:=False
+     Application.CutCopyMode = False
+    
+     Range("A14:L" & R1 + 1).Select
+         Selection.Borders(xlDiagonalDown).LineStyle = xlNone
+         Selection.Borders(xlDiagonalUp).LineStyle = xlNone
+         With Selection.Borders(xlEdgeLeft)
+             .LineStyle = xlContinuous
+             .ColorIndex = 0
+             .TintAndShade = 0
+             .Weight = xlThin
+         End With
+         With Selection.Borders(xlEdgeTop)
+             .LineStyle = xlContinuous
+             .ColorIndex = 0
+             .TintAndShade = 0
+             .Weight = xlThin
+         End With
+         With Selection.Borders(xlEdgeBottom)
+             .LineStyle = xlContinuous
+             .ColorIndex = 0
+             .TintAndShade = 0
+             .Weight = xlThin
+         End With
+         With Selection.Borders(xlEdgeRight)
+             .LineStyle = xlContinuous
+             .ColorIndex = 0
+             .TintAndShade = 0
+             .Weight = xlThin
+         End With
+         With Selection.Borders(xlInsideVertical)
+             .LineStyle = xlContinuous
+             .ColorIndex = 0
+             .TintAndShade = 0
+             .Weight = xlThin
+         End With
+         With Selection.Borders(xlInsideHorizontal)
+             .LineStyle = xlContinuous
+             .ColorIndex = 0
+             .TintAndShade = 0
+             .Weight = xlThin
+         End With
+     Rows("14:" & R1 + 1).Select
+     Selection.RowHeight = 20
+    
+    
+     SH0.Activate
+     Rows("15:19").Select
+     Selection.Copy
+     SH1.Activate
+     SH1.Range("A" & R1 + 3).Select
+     ActiveSheet.Paste
+     Application.CutCopyMode = False
+     SH1.Range("j" & R1 + 3) = sh.Range("b1").Value
+     SH1.Range("I7") = Date
+     SH1.Activate
+     Application.PrintCommunication = False
+     With ActiveSheet.PageSetup
+             .PrintTitleRows = ""
+             .PrintTitleColumns = ""
+     End With
+     Application.PrintCommunication = True
+     ActiveSheet.PageSetup.PrintArea = ""
+     Application.PrintCommunication = False
+     With ActiveSheet.PageSetup
+             .LeftHeader = ""
+             .CenterHeader = ""
+             .RightHeader = ""
+             .LeftFooter = ""
+             .CenterFooter = ""
+             .RightFooter = ""
+             .LeftMargin = Application.InchesToPoints(0.7)
+             .RightMargin = Application.InchesToPoints(0.7)
+             .TopMargin = Application.InchesToPoints(0.75)
+             .BottomMargin = Application.InchesToPoints(0.75)
+             .HeaderMargin = Application.InchesToPoints(0.3)
+             .FooterMargin = Application.InchesToPoints(0.3)
+             .PrintHeadings = False
+             .PrintGridlines = False
+             .PrintComments = xlPrintNoComments
+             .PrintQuality = 600
+             .CenterHorizontally = False
+             .CenterVertically = False
+             .Orientation = xlLandscape
+             .Draft = False
+             .PaperSize = xlPaperLetter
+             .FirstPageNumber = xlAutomatic
+             .Order = xlDownThenOver
+             .BlackAndWhite = False
+             .Zoom = 70
+             .PrintErrors = xlPrintErrorsDisplayed
+             .OddAndEvenPagesHeaderFooter = False
+             .DifferentFirstPageHeaderFooter = False
+             .ScaleWithDocHeaderFooter = True
+             .AlignMarginsHeaderFooter = True
+             .EvenPage.LeftHeader.Text = ""
+             .EvenPage.CenterHeader.Text = ""
+             .EvenPage.RightHeader.Text = ""
+             .EvenPage.LeftFooter.Text = ""
+             .EvenPage.CenterFooter.Text = ""
+             .EvenPage.RightFooter.Text = ""
+             .FirstPage.LeftHeader.Text = ""
+             .FirstPage.CenterHeader.Text = ""
+             .FirstPage.RightHeader.Text = ""
+             .FirstPage.LeftFooter.Text = ""
+             .FirstPage.CenterFooter.Text = ""
+             .FirstPage.RightFooter.Text = ""
+     End With
+     Application.PrintCommunication = True
+    
+     KN = KN + 1
+     W1.SaveAs Filename:= _
+             "D:\Shipment List\Shipment List on " & dat & "\Delivery note-" & KN & ".xls", FileFormat _
+             :=xlExcel8, Password:="", WriteResPassword:="", ReadOnlyRecommended:= _
+             False, CreateBackup:=False
+     W1.Close
+    
+     sh.Range("I" & K + 1 & ":I" & R).Value = "D:\Shipment List\Shipment List on " & dat & "\Delivery note-" & KN & ".xls"
+     W.Save
+     Application.ScreenUpdating = True
+ End Sub
+
+ Sub PackList()
+     Dim SH1 As Worksheet, W1 As Workbook, SH0 As Worksheet, W0 As Workbook, R1 As Long, R0 As Long, R As Long, i As Long, VL As String
+     Dim Num As Long, n As Integer, n1 As Long, K As Long, Nn As Long
+     Dim data, temp, arr, D
+     Dim j1&, j2&
+     Application.ScreenUpdating = False
+     Set W0 = ThisWorkbook
+     Set SH0 = W0.Sheets("Packing List")
+     Set W = Workbooks("Temp.xls")
+     Set sh = W.Sheets(1)
+     sh.Activate
+     R = sh.Range("a1", sh.UsedRange).Rows.Count
+     Rows("2:" & R).Select
+     ActiveWorkbook.Worksheets("Sheet1").Sort.SortFields.Clear
+     ActiveWorkbook.Worksheets("Sheet1").Sort.SortFields.Add Key:=Range("H3:H" & R) _
+             , SortOn:=xlSortOnValues, Order:=xlAscending, DataOption:=xlSortNormal
+     With ActiveWorkbook.Worksheets("Sheet1").Sort
+             .SetRange Range("A2:I" & R)
+             .Header = xlYes
+             .MatchCase = False
+             .Orientation = xlTopToBottom
+             .SortMethod = xlPinYin
+             .Apply
+     End With
+     sh.Range("a1").Select
+     SH0.Activate
+     Rows("1:15").Select
+     Selection.Copy
+     Workbooks.Add
+     ActiveSheet.Paste
+     Set W1 = ActiveWorkbook
+     Set SH1 = ActiveSheet
+    
+     For i = 3 To R
+     VL = sh.Range("H" & i).Value
+     If VL <> "" Then
+     n = Application.WorksheetFunction.CountIf(sh.Range("H:H"), VL)
+     R1 = SH1.Range("A1", SH1.UsedRange).Rows.Count
+     SH1.Range("A" & R1 + 1 & ":A" & R1 + n).Select
+     With Selection
+             .HorizontalAlignment = xlCenter
+             .VerticalAlignment = xlCenter
+             .WrapText = False
+             .Orientation = 0
+             .AddIndent = False
+             .IndentLevel = 0
+             .ShrinkToFit = False
+             .ReadingOrder = xlContext
+             .MergeCells = False
+     End With
+     Selection.Merge
+     SH1.Range("I" & R1 + 1 & ":I" & R1 + n).Select
+     Selection.Merge
+    
+     SH1.Range("J" & R1 + 1 & ":J" & R1 + n).Select
+     Selection.Merge
+     SH1.Range("K" & R1 + 1 & ":K" & R1 + n).Select
+     Selection.Merge
+     SH1.Range("L" & R1 + 1 & ":L" & R1 + n).Select
+     Selection.Merge
+     If R1 = 15 Then
+     SH1.Range("a" & R1 + 1).Value = 1
+     Else
+     SH1.Range("a" & R1 + 1).Value = SH1.Range("a" & R1 - n1 + 1).Value + 1
+     End If
+     sh.Activate
+     sh.Range(Cells(i, 2), Cells(i + n - 1, 4)).Select
+     Selection.Copy
+     SH1.Activate
+     SH1.Range("b" & R1 + 1).Select
+     Selection.PasteSpecial Paste:=xlPasteValues, Operation:=xlNone, SkipBlanks _
+             :=False, Transpose:=False
+     Application.CutCopyMode = False
+    
+     sh.Activate
+     sh.Range(Cells(i, 5), Cells(i + n - 1, 5)).Select
+     Selection.Copy
+     SH1.Activate
+     SH1.Range("f" & R1 + 1).Select
+     Selection.PasteSpecial Paste:=xlPasteValues, Operation:=xlNone, SkipBlanks _
+             :=False, Transpose:=False
+     Application.CutCopyMode = False
+    
+     sh.Activate
+     sh.Range(Cells(i, 6), Cells(i + n - 1, 7)).Select
+     Selection.Copy
+     SH1.Activate
+     SH1.Range("G" & R1 + 1).Select
+     Selection.PasteSpecial Paste:=xlPasteValues, Operation:=xlNone, SkipBlanks _
+             :=False, Transpose:=False
+     Application.CutCopyMode = False
+     i = i + n - 1
+     n1 = n
+     K = K + 1
+     Else
+     Num = sh.Range("E" & i).Value
+     For n1 = 1 To Num
+     R1 = SH1.Range("a1", SH1.UsedRange).Rows.Count
+     sh.Activate
+     sh.Range(Cells(i, 2), Cells(i, 4)).Select
+     Selection.Copy
+     SH1.Activate
+     SH1.Range("b" & R1 + 1).Select
+     Selection.PasteSpecial Paste:=xlPasteValues, Operation:=xlNone, SkipBlanks _
+             :=False, Transpose:=False
+     Application.CutCopyMode = False
+     SH1.Range("f" & R1 + 1) = 1
+     Nn = Application.WorksheetFunction.CountA(sh.Range("H:H")) - 1
+     SH1.Range("a" & R1 + 1).FormulaR1C1 = "=ROW()-" & Nn & "-15+" & K
+     Next
+     End If
+     Next
+     R1 = SH1.Range("a1", SH1.UsedRange).Rows.Count
+     SH1.Range("A" & Nn + 16).Select
+     Selection.Copy
+     Selection.PasteSpecial Paste:=xlPasteValues, Operation:=xlNone, SkipBlanks _
+             :=False, Transpose:=False
+     Application.CutCopyMode = False
+     Set SH0 = W0.Sheets("Mater Data")
+     R0 = SH0.Range("a1", SH0.UsedRange).Rows.Count
+     Set D = CreateObject("scripting.dictionary")
+     With SH0
+     data = .Range(Cells(1, 1).Address, Cells(R0, 3).Address)
+     For j1 = 1 To UBound(data)
+         D(data(j1, 1)) = data(j1, 3)
+     Next
+     End With
+     With SH1
+     temp = .Range(Cells(16, 3).Address, Cells(R1 + 1, 3).Address)
+     ReDim arr(1 To UBound(temp), 1 To 1)
+     For j2 = 1 To UBound(temp)
+     arr(j2, 1) = D(temp(j2, 1))
+     Next
+     .Range(Cells(16, 5), Cells(R1, 5)) = arr
+     End With
+    
+     With SH0
+     data = .Range(Cells(1, 1).Address, Cells(R0, 4).Address)
+     For j1 = 1 To UBound(data)
+         D(data(j1, 1)) = data(j1, 4)
+     Next
+     End With
+     With SH1
+     temp = .Range(Cells(Nn + 16, 3).Address, Cells(R1 + 1, 3).Address)
+     ReDim arr(1 To UBound(temp), 1 To 1)
+     For j2 = 1 To UBound(temp)
+     arr(j2, 1) = D(temp(j2, 1))
+     Next
+     .Range(Cells(Nn + 16, 9), Cells(R1, 9)) = arr
+     End With
+    
+     With SH0
+     data = .Range(Cells(1, 1).Address, Cells(R0, 5).Address)
+     For j1 = 1 To UBound(data)
+         D(data(j1, 1)) = data(j1, 5)
+     Next
+     End With
+     With SH1
+     temp = .Range(Cells(Nn + 16, 3).Address, Cells(R1 + 1, 3).Address)
+     ReDim arr(1 To UBound(temp), 1 To 1)
+     For j2 = 1 To UBound(temp)
+     arr(j2, 1) = D(temp(j2, 1))
+     Next
+     .Range(Cells(Nn + 16, 10), Cells(R1, 10)) = arr
+     End With
+    
+     With SH0
+     data = .Range(Cells(1, 1).Address, Cells(R0, 6).Address)
+     For j1 = 1 To UBound(data)
+         D(data(j1, 1)) = data(j1, 6)
+     Next
+     End With
+     With SH1
+     temp = .Range(Cells(Nn + 16, 3).Address, Cells(R1 + 1, 3).Address)
+     ReDim arr(1 To UBound(temp), 1 To 1)
+     For j2 = 1 To UBound(temp)
+     arr(j2, 1) = D(temp(j2, 1))
+     Next
+     .Range(Cells(Nn + 16, 11), Cells(R1, 11)) = arr
+     End With
+    
+     With SH0
+     data = .Range(Cells(1, 1).Address, Cells(R0, 7).Address)
+     For j1 = 1 To UBound(data)
+         D(data(j1, 1)) = data(j1, 7)
+     Next
+     End With
+     With SH1
+     temp = .Range(Cells(Nn + 16, 3).Address, Cells(R1 + 1, 3).Address)
+     ReDim arr(1 To UBound(temp), 1 To 1)
+     For j2 = 1 To UBound(temp)
+     arr(j2, 1) = D(temp(j2, 1))
+     Next
+     .Range(Cells(Nn + 16, 12), Cells(R1, 12)) = arr
+     End With
+     Set D = Nothing
+    
+     SH1.Range("A16:L" & R1).Select
+     Selection.Borders(xlDiagonalDown).LineStyle = xlNone
+     Selection.Borders(xlDiagonalUp).LineStyle = xlNone
+     With Selection.Borders(xlEdgeLeft)
+             .LineStyle = xlContinuous
+             .ColorIndex = 0
+             .TintAndShade = 0
+             .Weight = xlThin
+     End With
+     With Selection.Borders(xlEdgeTop)
+             .LineStyle = xlContinuous
+             .ColorIndex = 0
+             .TintAndShade = 0
+             .Weight = xlThin
+     End With
+     With Selection.Borders(xlEdgeBottom)
+             .LineStyle = xlContinuous
+             .ColorIndex = 0
+             .TintAndShade = 0
+             .Weight = xlThin
+     End With
+     With Selection.Borders(xlEdgeRight)
+             .LineStyle = xlContinuous
+             .ColorIndex = 0
+             .TintAndShade = 0
+             .Weight = xlThin
+     End With
+     With Selection.Borders(xlInsideVertical)
+             .LineStyle = xlContinuous
+             .ColorIndex = 0
+             .TintAndShade = 0
+             .Weight = xlThin
+     End With
+     With Selection.Borders(xlInsideHorizontal)
+             .LineStyle = xlContinuous
+             .ColorIndex = 0
+             .TintAndShade = 0
+             .Weight = xlThin
+     End With
+     Columns("B:E").Select
+     Columns("B:E").EntireColumn.AutoFit
+     Columns("F:F").ColumnWidth = 5
+     Columns("I:K").Select
+     Selection.ColumnWidth = 4.57
+     Columns("L:L").ColumnWidth = 4.71
+    
+     SH1.Cells(R1 + 3, 7) = "Package:"
+     SH1.Cells(R1 + 4, 7) = "Gross Weight:"
+     SH1.Cells(R1 + 5, 7) = "Net Weight:"
+     SH1.Cells(R1 + 6, 7) = "Volume:"
+     SH1.Cells(R1 + 3, 12) = "Ctn"
+     SH1.Cells(R1 + 4, 12) = "KG"
+     SH1.Cells(R1 + 5, 12) = "KG"
+     SH1.Cells(R1 + 6, 12) = "M3"
+     SH1.Range("I" & R1 + 3 & ":K" & R1 + 3).Select
+     Selection.Merge
+     SH1.Range("I" & R1 + 3 & ":K" & R1 + 3).Value = SH1.Range("a" & R1).Value
+     SH1.Range("I" & R1 + 4 & ":K" & R1 + 4).Select
+     Selection.Merge
+     Selection.NumberFormatLocal = "0.00_ "
+     SH1.Range("I" & R1 + 4 & ":K" & R1 + 4).FormulaR1C1 = "=SUM(R[" & 12 - R1 & "]C[3]:R[-4]C[3])"
+     SH1.Range("I" & R1 + 5 & ":K" & R1 + 5).Select
+     Selection.Merge
+     Selection.NumberFormatLocal = "0.00_ "
+     SH1.Range("I" & R1 + 5 & ":K" & R1 + 5).FormulaR1C1 = "=R[-1]C*0.7"
+     SH1.Range("I" & R1 + 6 & ":K" & R1 + 6).Select
+     Selection.Merge
+     Selection.NumberFormatLocal = "0.00_ "
+     SH1.Range("I" & R1 + 6 & ":K" & R1 + 6).FormulaR1C1 = "=SUMPRODUCT(R[" & 10 - R1 & "]C:R[-6]C,R[" & 10 - R1 & "]C[1]:R[-6]C[1],R[" & 10 - R1 & "]C[2]:R[-6]C[2])/1000000"
+     SH1.Range("H8") = "Total PKG:" & SH1.Cells(R1, 1).Value & "pkg"
+     DA = sh.Range("b1").Value
+    
+     SH1.Range("H7") = "Delivery Date:" & DA
+    
+     SH1.Range("A16:A" & R1).Select
+     With Selection
+             .HorizontalAlignment = xlCenter
+             .VerticalAlignment = xlCenter
+             .WrapText = False
+             .Orientation = 0
+             .AddIndent = False
+             .IndentLevel = 0
+             .ShrinkToFit = False
+             .ReadingOrder = xlContext
+     End With
+     SH1.Range(Cells(R1 + 3, 7), Cells(R1 + 6, 12)).Select
+     Selection.Font.Bold = True
+     SH1.Range("E" & R1 + 3 & ":E" & R1 + 6).Select
+     With Selection
+             .HorizontalAlignment = xlRight
+             .VerticalAlignment = xlCenter
+             .WrapText = False
+             .Orientation = 0
+             .AddIndent = False
+             .IndentLevel = 0
+             .ShrinkToFit = False
+             .ReadingOrder = xlContext
+             .MergeCells = False
+     End With
+     SH1.Range("I" & R1 + 3 & ":I" & R1 + 6).Select
+     With Selection
+             .HorizontalAlignment = xlCenter
+             .VerticalAlignment = xlCenter
+             .WrapText = False
+             .Orientation = 0
+             .AddIndent = False
+             .IndentLevel = 0
+             .ShrinkToFit = False
+             .ReadingOrder = xlContext
+     End With
+    
+     SH1.Range("G" & R1 + 3 & ":G" & R1 + 6).Select
+     With Selection
+             .HorizontalAlignment = xlRight
+             .VerticalAlignment = xlCenter
+             .WrapText = False
+             .Orientation = 0
+             .AddIndent = False
+             .IndentLevel = 0
+             .ShrinkToFit = False
+             .ReadingOrder = xlContext
+             .MergeCells = False
+     End With
+     Columns("G:G").EntireColumn.AutoFit
+     ActiveWindow.View = xlPageBreakPreview
+     ActiveSheet.VPageBreaks(1).DragOff Direction:=xlToRight, RegionIndex:=1
+     ActiveWindow.View = xlNormalView
+    
+     W1.SaveAs Filename:= _
+             "D:\Shipment List\Shipment List on " & dat & "\PackingList.xls", FileFormat _
+             :=xlExcel8, Password:="", WriteResPassword:="", ReadOnlyRecommended:= _
+             False, CreateBackup:=False
+    
+    
+     Application.ScreenUpdating = True
+ End Sub
+
+ Sub printList()
+    Dim Path As String
+    ChDir "D:\Shipment List"
+    Path = Application.GetOpenFilename
+    Workbooks.Open Filename:=Path
+    Set WW1 = ActiveWorkbook
+    Set SS1 = WW1.ActiveSheet
+    Set WW = ThisWorkbook
+    Set SS = WW.Sheets("Print Model")
+    Application.OnKey "~", "PrintList1"
+    Application.OnKey "{enter}", "PrintList1"
+
+ End Sub
+
+ Sub PrintList1()
+    Dim R1 As Long, i As Long, V1 As String, V2 As String, V3 As String, V4 As String, V5 As String, j As Long, Rr As Long
+    Application.OnKey "~"
+    Application.OnKey "{enter}"
+    Rr = SS1.Range("A1", SS1.UsedRange).Rows.Count
+    R1 = Selection.Rows.Count
+    j = ActiveCell.Row
+    For i = j To j + R1 - 1
+    V1 = SS1.Range("B" & i).Value
+    V2 = SS1.Range("C" & i).Value
+    V3 = SS1.Range("D" & i).Value
+    V4 = SS1.Range("L" & i).Value & "/" & SS1.Range("I" & i).Value & "*" & SS1.Range("J" & i).Value & "*" & SS1.Range("K" & i).Value
+    V5 = "'" & SS1.Range("A" & i).Value & "/" & SS1.Range("A" & Rr - 6).Value
+    If i < Rr - 6 Then
+    If SS1.Range("A" & i + 1).Value = 0 Then
+    Do
+    i = i + 1
+    V1 = V1 & "/" & SS1.Range("B" & i).Value
+    V2 = V2 & "/" & SS1.Range("C" & i).Value
+    V3 = V3 & "/" & SS1.Range("D" & i).Value
+    Loop Until SS1.Range("A" & i + 1).Value <> 0 Or i >= Rr - 6
+    End If
+    End If
+    SS.Activate
+    SS.Range("B5") = V1
+    SS.Range("B7") = V2
+    SS.Range("B8") = V3
+    SS.Range("B9") = V4
+    SS.Range("B10") = V5
+    SS.PrintOut Copies:=1, Collate:=True, IgnorePrintAreas:=False
+    Next
+
+ End Sub
+
+ Sub InputSN()
+     Dim i As Long, R As Long, Rr As Long, VS As String, K As Integer, SH1 As Worksheet, W1 As Workbook, R1 As Long, SH2 As Worksheet, W2 As Workbook
+     Dim j As Long, V, V1 As String, n As Integer, n1 As Integer, Name1, Name2, Name3, wb As Workbook
+    
+     Set W = Workbooks("Temp.xls")
+     Set sh = W.Sheets(1)
+     Set W1 = Workbooks("PackingList.xls")
+     Set SH1 = W1.Sheets(1)
+     Set W2 = Workbooks("parts to GGMR.xls")
+     Application.ScreenUpdating = False
+     Rr = sh.Range("H65536").End(xlUp).Row
+     If Rr > 2 Then
+     sh.Activate
+     sh.Range("F3:G" & Rr).Select
+     Selection.Copy
+     SH1.Activate
+     SH1.Range("G16").Select
+     ActiveSheet.Paste
+     Application.CutCopyMode = False
+     R1 = Rr - 2 + 15
+     End If
+     R = sh.Range("A1", sh.UsedRange).Rows.Count
+     If R1 <= 15 Then
+     R1 = 15
+     End If
+    
+     For i = Rr + 1 To R
+    
+     If sh.Cells(i, 5).Value = 1 Then
+     R1 = R1 + 1
+     sh.Activate
+     sh.Range("F" & i & ":G" & i).Select
+     Selection.Copy
+     SH1.Activate
+     SH1.Range("G" & R1).Select
+     ActiveSheet.Paste
+     Application.CutCopyMode = False
+     Else
+     V = sh.Cells(i, 5).Value
+     n = 0
+     For K = 1 To V
+     R1 = R1 + 1
+     If K < V Then
+     On Error Resume Next
+     n1 = Application.WorksheetFunction.Find("/", sh.Cells(i, 6), n + 1)
+     SH1.Range("G" & R1) = Mid(sh.Cells(i, 6), n + 1, n1 - n - 1)
+     SH1.Range("H" & R1) = sh.Cells(i, 7).Value
+     n = n1
+     Else
+     n1 = Len(sh.Cells(i, 6))
+     SH1.Range("G" & R1) = Mid(sh.Cells(i, 6), n + 1, n1 - n)
+     SH1.Range("H" & R1) = sh.Cells(i, 7).Value
+     End If
+     Next
+     End If
+     Next
+     SH1.Activate
+     Range("G15:H" & R1).Select
+     Selection.Borders(xlDiagonalDown).LineStyle = xlNone
+     Selection.Borders(xlDiagonalUp).LineStyle = xlNone
+     With Selection.Borders(xlEdgeLeft)
+             .LineStyle = xlContinuous
+             .ColorIndex = 0
+             .TintAndShade = 0
+             .Weight = xlThin
+     End With
+     With Selection.Borders(xlEdgeTop)
+             .LineStyle = xlContinuous
+             .ColorIndex = 0
+             .TintAndShade = 0
+             .Weight = xlThin
+     End With
+     With Selection.Borders(xlEdgeBottom)
+             .LineStyle = xlContinuous
+             .ColorIndex = 0
+             .TintAndShade = 0
+             .Weight = xlThin
+     End With
+     With Selection.Borders(xlEdgeRight)
+             .LineStyle = xlContinuous
+             .ColorIndex = 0
+             .TintAndShade = 0
+             .Weight = xlThin
+     End With
+     With Selection.Borders(xlInsideVertical)
+             .LineStyle = xlContinuous
+             .ColorIndex = 0
+             .TintAndShade = 0
+             .Weight = xlThin
+     End With
+     With Selection.Borders(xlInsideHorizontal)
+             .LineStyle = xlContinuous
+             .ColorIndex = 0
+             .TintAndShade = 0
+             .Weight = xlThin
+     End With
+     Columns("G:G").EntireColumn.AutoFit
+     Range("A10").Select
+     W1.Save
+    
+     For i = 3 To R
+     V = sh.Cells(i, 10).Value
+     V1 = sh.Cells(i, 11).Value
+     W2.Sheets(V).Range("O" & V1) = sh.Cells(i, 6).Value
+     W2.Sheets(V).Cells(V1, 16).Value = sh.Cells(i, 7).Value
+     Next
+     W2.Save
+     Application.ScreenUpdating = True
+End Sub
+
+'copyitem
+Private Sub CommandButton1_Click()
+    Module1.CopyList
+End Sub
+
+ Private Sub UserForm_QueryClose(Cancel As Integer, CloseMode As Integer)
+     Windows("temp.xls").Activate
+     Shipment.Show 0
+ End Sub
+ 
+ 'shipment
+ Private Sub CommandButton1_Click()
+    Shipment.Hide
+    CopyItem.Show 0
+End Sub
+
+Private Sub CommandButton2_Click()
+    Module1.Create_DN
+End Sub
+
+Private Sub CommandButton3_Click()
+    Module1.PackList
+End Sub
+
+Private Sub CommandButton4_Click()
+    Module1.printList
+End Sub
+
+Private Sub CommandButton5_Click()
+     Windows("Shipment list.xlsm").Visible = True
+    Sheets("Mater Data").Activate
+End Sub
+
+Private Sub CommandButton6_Click()
+    Windows("Shipment list.xlsm").Visible = False
+    Workbooks("Shipment list.xlsm").Save
+    Application.DisplayAlerts = False
+    Workbooks("Shipment list.xlsm").Close
+    Application.DisplayAlerts = True
+End Sub
+
+'starting
+Private Sub CommandButton4_Click()
+Windows("Shipment list for LHH.xls").Visible = False
+ Workbooks("Shipment list for LHH.xls").Save
+ Application.DisplayAlerts = False
+ Workbooks("Shipment list for LHH.xls").Close
+ Application.DisplayAlerts = True
+End Sub
+
+Private Sub Create_New_Click()
+Starting.Hide
+ Module1.Start
+End Sub
+
+Private Sub input_sn_Click()
+InputSN
+End Sub
+
+Private Sub Print_old_file_Click()
+Starting.Hide
+ Shipment.Show 0
+End Sub
+
+'workbook open
+Private Sub Workbook_Open()
+     L = Application.CommandBars("Worksheet Menu Bar").Controls.Count
+     For i = L To 1 Step -1
+         S = Application.CommandBars("Worksheet Menu Bar").Controls(i).Caption
+         If InStr(1, UCase(S), "Shipment_List_YXY", vbTextCompare) > 0 Then
+         Exit Sub
+         End If
+     Next
+     i = Application.CommandBars("Worksheet Menu Bar").Controls.Count
+     Application.CommandBars("Worksheet Menu Bar").Controls.Add Type:= _
+         msoControlButton, ID:=2950, Before:=i + 1
+     i = Application.CommandBars("Worksheet Menu Bar").Controls.Count
+     Application.CommandBars("Worksheet Menu Bar").Controls(i).Caption = "&Shipment_List_YXY"
+     Application.CommandBars("Worksheet Menu Bar").Controls(i).Style = msoButtonCaption
+     Application.CommandBars("Worksheet Menu Bar").Controls(i).OnAction = "'Shipment list.xlsm'!ShowF"
+End Sub
+
