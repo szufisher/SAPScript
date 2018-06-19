@@ -1,3 +1,4 @@
+ 'make sure the d:/shipment list/ folder exists
  Public sh As Worksheet, W As Workbook, DA As Date, dat, KN As Integer, WW As Workbook, SS As Worksheet, WW1 As Workbook, SS1 As Worksheet
  Sub ShowF()
     Starting.Show 0
