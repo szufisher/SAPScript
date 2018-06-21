@@ -37,17 +37,19 @@ End Sub
 Public SH1 As Worksheet, SH2 As Worksheet, R As Long, back As Boolean, AC As Integer, AR As Long, Implement As Boolean
  
  Sub LK()
+    '
     Set SH1 = ActiveSheet
     R = SH1.Range("a1", SH1.UsedRange).Rows.Count
     AR = ActiveCell.Row
-    AC = ActiveCell.Column
+    AC = ActiveCell.Column  'the target column to store lookup return result, this is the cell to put the formula
     Implement = False
     If SH1.AutoFilterMode Then
         On Error Resume Next
         SH1.ShowAllData
     End If
-    Application.OnKey "~", "DB"
-    Application.OnKey "{enter}", "DB"
+    ' intercept the ENTER and ESC key to invoke or cancel the customized lookup function
+    Application.OnKey "~", "DB"   'ENTER    https://msdn.microsoft.com/en-us/vba/excel-vba/articles/application-onkey-method-excel
+    Application.OnKey "{enter}", "DB"  'ENTER (numeric keypad)
     Application.OnKey "{ESC}", "my_Quiet"
  End Sub
  
@@ -56,13 +58,13 @@ Public SH1 As Worksheet, SH2 As Worksheet, R As Long, back As Boolean, AC As Int
     Dim data, temp, arr, D
     Dim i&, k&
     
-    Application.OnKey "~"
+    Application.OnKey "~"        'deactivate the ENTER key
     Application.OnKey "{enter}"
     Application.OnKey "{ESC}"
-    Set D = CreateObject("scripting.dictionary")
-    Set SH2 = ActiveSheet
-    AC1 = ActiveCell.Column
-    n = Selection.Columns.Count
+    Set D = CreateObject("scripting.dictionary")   'dictionary for lookup
+    Set SH2 = ActiveSheet    'the vlookup function's 2st parameter , the sheet to be looked up
+    AC1 = ActiveCell.Column  'the vlookup function's 1st parameter
+    n = Selection.Columns.Count   'get the lookup return column parameter, the 3rd parameter
     AC2 = AC1 + n - 1
     RD = SH2.Range("A1", SH2.UsedRange).Rows.Count
     SH1.Activate
@@ -96,9 +98,9 @@ Public SH1 As Worksheet, SH2 As Worksheet, R As Long, back As Boolean, AC As Int
             temp = .Range(Cells(R1, C1).Address, Cells(R + 1, C1).Address)
             ReDim arr(1 To UBound(temp), 1 To 1)
             For k = 1 To UBound(temp)
-            arr(k, 1) = D(temp(k, 1))
+                arr(k, 1) = D(temp(k, 1))   'use the dictionary for actual lookup
             Next
-            .Range(Cells(R1, AC), Cells(R, AC)) = arr
+            .Range(Cells(R1, AC), Cells(R, AC)) = arr     'for performance consideration, assign the lookup result to the orginal worksheet in one go,
         End With
         Set D = Nothing
     End If
@@ -115,3 +117,4 @@ Public SH1 As Worksheet, SH2 As Worksheet, R As Long, back As Boolean, AC As Int
          Application.OnKey "{ESC}"
      End If
  End Sub
+
