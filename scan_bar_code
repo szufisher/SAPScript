@@ -1,0 +1,39 @@
+frappe.ui.form.on("Sales Invoice", {
+    scan_bar_code: function(frm, cdt, cdn){
+		if (frm.doc.scan_bar_code){	
+			frappe.db.get_value('Item', {barcode: frm.doc.scan_bar_code}, 'item_code', (r) => {			
+				if(r !==undefined){					
+					var row_count=frm.grids[0].grid.grid_rows.length;
+					var cur_grid= frm.grids[0].grid
+					var find_exist_row = "no";
+					for (var i = 0; i < row_count; i++) {
+						if (cur_grid.grid_rows[i].doc.item_code ===undefined) { 							
+							find_exist_row = "empty";
+							break;
+						}						
+						else if (cur_grid.grid_rows[i].doc.item_code ===r.item_code) { 
+							find_exist_row = "yes";						
+							break;
+						}						
+					}
+					if (find_exist_row === "no"){
+						var new_row= cur_grid.add_new_row()
+						if (new_row !==undefined){
+							frappe.model.set_value(cur_grid.doctype, new_row.name, "item_code", r.item_code);
+						};								
+					}
+					else if (find_exist_row === "empty"){
+						frappe.model.set_value(cur_grid.doctype, cur_grid.grid_rows[i].doc.name, "item_code", r.item_code);
+					}
+					else{
+						if (cur_grid.grid_rows[i].doc.qty !=undefined){
+							frappe.model.set_value(cur_grid.doctype, cur_grid.grid_rows[i].doc.name, "qty", cur_grid.grid_rows[i].doc.qty + 1);
+						}
+					}					
+				}
+			});					
+			frm.set_value('scan_bar_code','');	
+		}
+	return false;
+	},	
+})
