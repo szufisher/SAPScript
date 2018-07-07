@@ -1,7 +1,9 @@
 frappe.ui.form.on("Sales Invoice", {
     scan_bar_code: function(frm, cdt, cdn){
 		if (frm.doc.scan_bar_code){
-			frappe.db.get_value('Item', {barcode: frm.doc.scan_bar_code}, 'item_code', (r) => {
+			var scan_bar_code_field = frm.get_field('scan_bar_code')
+			var barcode =frm.doc.scan_bar_code
+			frappe.db.get_value('Item', {barcode:barcode}, 'item_code', (r) => {
 				if(r){					
 					var cur_grid= frm.grids[0].grid
 					var cur_doctype= cur_grid.doctype
@@ -27,19 +29,22 @@ frappe.ui.form.on("Sales Invoice", {
 						var new_row= cur_grid.add_new_row(-1)
 						if (new_row){
 							frappe.model.set_value(cur_doctype, new_row.name, "item_code", r.item_code);
+							scan_bar_code_field.set_new_description('New row:' + cur_grid_rows[0].doc.idx + ' ' +cur_grid_rows[0].doc.item_code + '  Created')
 						};
 					}
 					else if (find_exist_row === "empty"){
 						frappe.model.set_value(cur_doctype, cur_grid_rows[i].doc.name, "item_code", r.item_code);
+						scan_bar_code_field.set_new_description('New row:' + cur_grid_rows[i].doc.idx + ' ' +cur_grid_rows[i].doc.item_code + '  Created')
 					}
 					else{
 						if (cur_grid_rows[i].doc.qty){
 							frappe.model.set_value(cur_doctype, cur_grid_rows[i].doc.name, "qty", cur_grid_rows[i].doc.qty + 1);
+							scan_bar_code_field.set_new_description('Row:' + cur_grid_rows[i].doc.idx + ' ' +cur_grid_rows[i].doc.item_code + ' Qty incresed by 1')
 						}
 					}
 				}
 				else{
-					frappe.msgprint({message:frm.doc.scan_bar_code +' does not exist!', title:'Barcode scan failed'})
+					scan_bar_code_field.set_new_description(barcode +' does not exist!')
 				}
 			});
 			frm.set_value('scan_bar_code','');
