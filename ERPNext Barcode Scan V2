@@ -24,7 +24,7 @@ frappe.ui.form.on("Sales Invoice", {
 						}
 					}
 					if (find_exist_row === "no"){
-						var new_row= cur_grid.add_new_row()
+						var new_row= cur_grid.add_new_row(-1)
 						if (new_row){
 							frappe.model.set_value(cur_doctype, new_row.name, "item_code", r.item_code);
 						};
