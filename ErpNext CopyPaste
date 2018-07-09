@@ -1,54 +1,51 @@
-  field.$input[0].onpaste = function(e) {
-  var cur_table_field =$(e.target).closest('div [data-fieldtype="Table"]').data('fieldname')
-  var pastedText = undefined;
-  if (window.clipboardData && window.clipboardData.getData) { // IE
-	pastedText = window.clipboardData.getData('Text');
-  } else if (e.clipboardData && e.clipboardData.getData) {
-	pastedText = e.clipboardData.getData('text/plain');
-  }
-  var data = frappe.utils.csv_to_array(pastedText,'\t');
-  if (data.length > 50){
-	frappe.msgprint('for performance, please copy less than 50 rows');
-	return;
-  }
-  if (data.length > 1 || data[0].length > 1){
-	  var cur_grid= cur_frm.get_field(cur_table_field).grid;
-	  var cur_grid_rows = cur_grid.grid_rows
-	  var cur_doctype = cur_grid.doctype
-	  var fieldnames = undefined
-	  if (cur_frm.copy_header_fieldnames){
-		fieldnames=cur_frm.copy_header_fieldnames
-	  }
-	  else{
-		var fieldnames = data.shift();
-		cur_frm.copy_header_fieldnames=fieldnames
-	  }  
-	  $.each(data, function(i, row) {
-			var blank_row = true;
-			$.each(row, function(ci, value) {
-				if(value) {
-					blank_row = false;
-					return false;
+ 			field.$input[0].onpaste = function(e) {
+				if ($(e.target).val()) return;				  
+				var cur_table_field =$(e.target).closest('div [data-fieldtype="Table"]').data('fieldname')
+				var cur_row_docname =$(e.target).closest('div .grid-row"]').data('name')
+				var pastedText = undefined;
+				if (window.clipboardData && window.clipboardData.getData) { // IE
+					pastedText = window.clipboardData.getData('Text');
+				} else if (e.clipboardData && e.clipboardData.getData) {
+					pastedText = e.clipboardData.getData('text/plain');
 				}
-			});
-			if(!blank_row) {
-				if (i===0)
-				{
-					var row_count = cur_grid_rows.length;
-					if (cur_grid_rows[row_count-1].doc.item_code===undefined){
-						cur_grid_rows[row_count-1].remove();
+				var data = frappe.utils.csv_to_array(pastedText,'\t');
+				if (data.length > 50){
+					frappe.msgprint('for performance, please copy less than 50 rows');
+					return;
+				}
+				if (data.length > 1 || data[0].length > 1){
+					var cur_grid= cur_frm.get_field(cur_table_field).grid;
+					var cur_grid_rows = cur_grid.grid_rows
+					var cur_doctype = cur_grid.doctype
+					var fieldnames = undefined
+					if (cur_frm.copy_header_fieldnames){
+						fieldnames=cur_frm.copy_header_fieldnames
 					}
+					else{
+						var fieldnames = data.shift();
+						cur_frm.copy_header_fieldnames=fieldnames
+					}					  
+					$.each(data, function(i, row) {
+						var blank_row = true;
+						$.each(row, function(ci, value) {
+							if(value) {
+								blank_row = false;
+								return false;
+							}
+						});
+						if(!blank_row) {
+							if (i===0)	cur_grid.get_row(cur_row_docname).remove();								
+							var new_row = cur_grid.add_new_row();
+							row_name = new_row.name;									
+							$.each(row, function(ci, value) {
+								var fieldname = fieldnames[ci];
+								frappe.model.set_value(cur_doctype, row_name, fieldname, value);
+								});
+							frappe.show_progress(__('Uploading'), i, data.length);
+						};
+							
+					});
+					frappe.hide_progress();
+					return false; // Prevent the default handler from running.
 				}
-				var new_row = cur_grid.add_new_row();
-				row_name = new_row.name;
-				$.each(row, function(ci, value) {
-					var fieldname = fieldnames[ci];
-					frappe.model.set_value(cur_doctype, row_name, fieldname, value);
-				});
-				frappe.show_progress(__('Uploading'), i, data.length);
 			};
-		});
-		frappe.hide_progress();
-		return false; // Prevent the default handler from running.
-	}
-};
