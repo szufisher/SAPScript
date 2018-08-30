@@ -1,5 +1,6 @@
 # tips
-# vba vs python Key word capital letter, If -> if, Else If-> elif, Exit For ->break, On Error Resume Next -> try except pass
+# vba vs python: Key word capital letter, If -> if, Else If-> elif, Exit For ->break, On Error Resume Next -> try except pass
+# sendVKey 0 ->sendVKey(0), .press ->.press()
 # dependent module pywin32, pymssql
 # configparser with default, otherwise there is error when config key not available
 # exe by pyinstaller, 1.if there is error, when double click to run the exe, the cmd window disappeared instantly, no chance to see error log
