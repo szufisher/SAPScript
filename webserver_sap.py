@@ -1,5 +1,14 @@
+# tips
+# vba vs python Key word capital letter, If -> if, Else If-> elif, Exit For ->break, On Error Resume Next -> try except pass
+# dependent module pywin32, pymssql
+# configparser with default, otherwise there is error when config key not available
+# exe by pyinstaller, 1.if there is error, when double click to run the exe, the cmd window disappeared instantly, no chance to see error log
+# run cmd, cd to the exe file folder, type the file name, then cmd window will show the error
+# ImportError: No module named decimal, it is due to mssql dynamicly import this module, pyinstaller does not packed it into exe, 
+# import in your py file even it is not used directly in the py file!
+
 from cgi import parse_qs
-import ConfigParser
+import ConfigParser,decimal
 from wsgiref.simple_server import make_server
 import sys, win32com.client
 import pymssql
