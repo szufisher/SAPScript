@@ -5,7 +5,7 @@
 # configparser with default, otherwise there is error when config key not available
 # exe by pyinstaller, 1.if there is error, when double click to run the exe, the cmd window disappeared instantly, no chance to see error log
 # run cmd, cd to the exe file folder, type the file name, then cmd window will show the error
-# ImportError: No module named decimal, it is due to mssql dynamicly import this module, pyinstaller does not packed it into exe, 
+# ImportError: No module named decimal, it is due to this module imported by mssql dynamically , pyinstaller did not pack it into exe, 
 # import in your py file even it is not used directly in the py file!
 
 from cgi import parse_qs
