@@ -1,0 +1,59 @@
+ Private Sub Workbook_Open()
+    Dim sCaption As String
+    l = Application.CommandBars("Worksheet Menu Bar").Controls.Count
+     For i = l To 1 Step -1
+         sCaption = Application.CommandBars("Worksheet Menu Bar").Controls(i).Caption
+         If InStr(1, UCase(sCaption), "Batch Print Label", vbTextCompare) > 0 Then
+            Exit Sub
+         End If
+     Next
+     i = Application.CommandBars("Worksheet Menu Bar").Controls.Count
+     Application.CommandBars("Worksheet Menu Bar").Controls.Add Type:= _
+         msoControlButton, ID:=2950, Before:=i + 1
+     i = Application.CommandBars("Worksheet Menu Bar").Controls.Count
+     Application.CommandBars("Worksheet Menu Bar").Controls(i).Caption = "&Batch Print Label"
+     Application.CommandBars("Worksheet Menu Bar").Controls(i).Style = msoButtonCaption
+     Application.CommandBars("Worksheet Menu Bar").Controls(i).OnAction = "'batch_print_label.xlsm'!batch_print"
+End Sub
+ Sub batch_print()
+    Dim row, selectedRange As Range
+    Application.ActivePrinter = "Deli DL-820T on Ne05:"  'specify printer manually, need to include portno, fetched via debug adding watch variable
+    Set selectedRange = Application.Selection
+    Set sheet_batch_print = Workbooks("batch_print_label.xlsm").Sheets("sheet1")
+    
+    With sheet_batch_print.PageSetup
+        .LeftHeader = ""
+        .CenterHeader = ""
+        .RightHeader = ""
+        .LeftFooter = ""
+        .CenterFooter = ""
+        .RightFooter = ""
+        .LeftMargin = Application.InchesToPoints(0.3)
+        .RightMargin = Application.InchesToPoints(0.15)
+        .TopMargin = Application.InchesToPoints(0.25)
+        .BottomMargin = Application.InchesToPoints(0)
+        .HeaderMargin = Application.InchesToPoints(0)
+        .FooterMargin = Application.InchesToPoints(0)
+        .PrintHeadings = False
+        .PrintGridlines = False
+        .PrintComments = xlPrintNoComments
+        .PrintQuality = 203
+        .CenterHorizontally = False
+        .CenterVertically = False
+        .Orientation = xlPortrait
+        .Draft = False
+        .PaperSize = 258  '4 * 4 inch
+    End With
+   
+    For Each row In selectedRange.Rows
+        Debug.Print row.row
+        sheet_batch_print.Cells(6, 2) = Cells(row.row, 2)
+        sheet_batch_print.Cells(7, 2) = "xxx" 'Cells(row.row, 1)
+        sheet_batch_print.Cells(8, 2) = Cells(row.row, 3)
+        sheet_batch_print.Cells(9, 2) = Cells(row.row, 4)
+        sheet_batch_print.Cells(10, 2) = Cells(row.row, 12).Text + " / " + Cells(row.row, 9).Text + " * " + Cells(row.row, 10).Text + " * " + Cells(row.row, 11).Text
+        sheet_batch_print.Cells(11, 2) = Cells(row.row, 1)
+        sheet_batch_print.PrintOut
+    Next row
+    
+End Sub
