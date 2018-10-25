@@ -47,6 +47,8 @@ authorizations=[[1,'po_org','act','01',''],
 			  [4,'po_type','type','nb',''],
 			  [5,'po_type','act','01',''],
 			  [5,'po_type','type','db',''],
+			  [55,'po_type','act','01','09'],
+			  [55,'po_type','type','*',''],
 			  [11,'sle_org','act','3',''],
 			  [11,'sle_org','plant','1000',''],
 			  [11,'sle_org','plant','3000','4000'],
@@ -139,8 +141,14 @@ def get_authorization(doctype, act='03', user=None, no_wildcard_rec = 0):
 		1. remove duplicate records from different roles
 		2. remove records for auth obj with at least one record wildcard for all fields
 	"""
-	doctype_auth_objs = [j[0] for j in auth_objs_fields[doctype]]	
-	auths= [i for i in authorizations if i[1] in doctype_auth_objs and i[2] !='act']
+	doctype_auth_objs = set([j[0] for j in auth_objs_fields[doctype]]
+	auth_IDS = [auth[0] for auth in authorizations if auth[2]=='act' and auth[1] in doctype_auth_objs 
+			and (auth[3] in [act,'*'] or auth[3]<=act<=auth[4] or match(auth[3], act))]
+	if not auth_IDS:
+		return False
+	auths= [i for i in authorizations if i[0] in auth_IDS and i[2] !='act']  # non act records
+	if not auths: # auth obj only contain act field
+		return True
 	existing_auth = {}  # auth rec without ID field to check duplicate auth records
 	id_auth,obj_auth, auth_rec,result = [],[],[],[]
 	id_wildcard,obj_wildcard = False,False
@@ -162,7 +170,7 @@ def get_authorization(doctype, act='03', user=None, no_wildcard_rec = 0):
 			id_auth = []
 			auth_rec = []
 		if auths[i][1] != next_auth_obj:
-			if (no_wildcard_rec and obj_wildcard) or not no_wildcard_rec:
+			if (no_wildcard_rec and not obj_wildcard) or not no_wildcard_rec:
 				result.extend(obj_auth)
 			obj_wildcard = False
 			obj_auth = []
@@ -227,37 +235,36 @@ def _auth_check(doc, act, user, doctype=None, trace=0):
 	auth_objs = auth_objs_fields.get(doctype)
 	if not auth_objs:
 		return True
-	auths = get_authorization(doctype)	
+	auths = get_authorization(doctype, act, user)
 	if not doc:
-		authorization_objects = set([j[0] for j in auth_objs])
-		for auth in auths:
-			if auth[1] in authorization_objects and auth[2] == 'act' and (auth[3] in [act,'*'] 
-				or auth[3]<=act<=auth[4] or match(auth[3], act)):
-				return True
-			return False
+		if auths:
+			return True
 	else:
-		pre_auth_obj = ''
-		for (auth_obj,auth_field) in auth_objs:
-			#reset when auth objects changed, different auth obj to be connected by AND in SQL where clause
-			if auth_obj != pre_auth_obj:
-				result = []
-			else:
-				pre_auth_obj = auth_obj
-			obj_auths = [auth for auth in auths if auth[1] == auth_obj]	
-			if not obj_auths:
-				continue						
-			check_value = act if auth_field=='act' else doc.get(auth_field)
-			if not check_value:  # bypass check for empty to be checked doc field
-				auth = [i[0] for i in obj_auths if i[2]== auth_field]
-			else:				
-				auth = [i[0] for i in obj_auths if i[2]== auth_field and check_field(doctype,auth_field, check_value, i[3],i[4])]			
-			if not auth:				
-				return False
-			else:
-				result = set(result) & set(auth) if result else set(auth)			
-			if not result:				
-				return False		
-	return len(result)>0
+		if not [i for i in auth_objs if i[2] != 'act']:  #only act auth field defined for the auth obj
+			return auths
+		else:
+			pre_auth_obj = ''
+			for (auth_obj,auth_field) in auth_objs:
+				#reset when auth objects changed, different auth obj to be connected by AND in SQL where clause
+				if auth_obj != pre_auth_obj:
+					result = []
+				else:
+					pre_auth_obj = auth_obj
+				obj_auths = [auth for auth in auths if auth[1] == auth_obj]	
+				if not obj_auths:
+					continue
+				check_value = act if auth_field=='act' else doc.get(auth_field)
+				if not check_value:  # bypass check for empty to be checked doc field
+					auth = [i[0] for i in obj_auths if i[2]== auth_field]
+				else:				
+					auth = [i[0] for i in obj_auths if i[2]== auth_field and check_field(doctype,auth_field, check_value, i[3],i[4])]			
+				if not auth:				
+					return False
+				else:
+					result = set(result) & set(auth) if result else set(auth)			
+				if not result:				
+					return False		
+			return len(result)>0
 
 import collections	
 def get_match_conditions(doctype, act='read', user=None):
@@ -280,64 +287,42 @@ def get_match_conditions(doctype, act='read', user=None):
 				condition = "%s in (%s)" %(auth[2], ','.join(["'%s'" %(i) for i in descendants]))
 		return condition
 		
-	if not 'match_condition' in mylocals[user].get(doctype).keys():			
-		auths = get_authorization(doctype)	
-		# extract auth IDS by of the activity/operation
-		auth_IDS = [auth[0] for auth in auths if auth[3]==act and 
-			(auth[3] in [act,'*'] or auth[3]<=act<=auth[4] or match(auth[3], act))]			
-		auth_conditions= {}							
-		# remove duplicate authorizations
-		for auth_ID in auth_IDS:
-			auth_values = [i for i in auths if i[0] == auth_ID  and i[2]!='act']
-			auth_obj = auth_values[0][1]
-			auth_obj_auths = auth_conditions.get(auth_obj)
-			if auth_obj_auths:
-				auth_obj_auths.extend(auth_values)
-			else:
-				auth_conditions[auth_obj] = auth_values
-		# build filter condition per authorizaiton/auth obj & auth field
-		auth_conditions = collections.OrderedDict(sorted(auth_conditions.items()))		
-		result = pre_obj = obj_conn_str = ''
-		for obj, authes in auth_conditions.items():
-			if pre_obj and result:		
-				if obj == pre_obj:
-					obj_conn_str = conn_str = ')) or ('
+	if not 'match_condition' in mylocals[user].get(doctype).keys():
+		auths = get_authorization(doctype, act, user, no_wildcard_rec=True)
+		result = ''
+		count = len(auths)
+		for i in range(count):
+			pre_auth_id = auths[i-1][0] if i >0 else ''
+			pre_auth_obj = auths[i-1][1] if i >0 else ''
+			pre_auth_field = auths[i-1][2] if i >0 else ''
+			if auths[i][1] != pre_auth_obj:
+				if i == 0:
+					result = '('
 				else:
-					obj_conn_str = ')) and ('
+					result += ' and ('
 			else:
-				obj_conn_str = '('  
-			pre_obj = obj		
-			pre_auth_ID = pre_field = obj_condition= ''		
-			first_field = pre_wildcard = cur_wildcard = False
-			for auth in authes:			
-				if not pre_field:
-					conn_str = '('
-					first_field = True
-				else:
-					if auth[0] == pre_auth_ID:
-						if auth[2] == pre_field:
-							conn_str = ' or '
-						else:
-							first_field = True
-							pre_wildcard = cur_wildcard
-							cur_wildcard = False
-							conn_str = ') and ('					
-					else:
-						if cur_wildcard:
-							break
-						first_field = True
-						conn_str = ')) or (('					
-				if auth[3] == '*' and (first_field or pre_wildcard):
-					cur_wildcard = True
-				pre_auth_ID, pre_field = auth[0],auth[2]			 
-				field_condition=build_condition(auth)
-				#print((auth,field_condition))
-				obj_condition = '%s%s%s' %(obj_condition, conn_str, field_condition)
-			if not cur_wildcard:
-				result += obj_conn_str + obj_condition
-		if result:
-			result += "))"	
-			
+				if auths[i][0] != pre_auth_id:
+					result += ' or '
+			if auths[i][0] != pre_auth_id:
+				result += '('
+			else:
+				if auths[i][2] != pre_auth_field:
+					result += ' and '
+			if auths[i][2] != pre_auth_field:
+				result += '('
+			else:
+				result += ' or '
+			field_condition=build_condition(auths[i])
+			result += field_condition			
+			next_auth_id = auths[i+1][0] if i < count-1 else ''
+			next_auth_obj = auths[i+1][1] if i < count-1 else ''
+			next_auth_field = auths[i+1][2] if i < count-1 else ''
+			if auths[i][2] != next_auth_field:
+				result += ')'
+			if auths[i][0] != next_auth_id:
+				result += ')'
+			if auths[i][1] != next_auth_obj:
+				result += ')'	
 		mylocals[user].get(doctype).update({'match_condition': result})
 		
 	return mylocals[user].get(doctype).get('match_condition')
