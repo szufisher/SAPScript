@@ -615,7 +615,7 @@ Sub va03_download_sales_order(last_zmt1_row As Integer)
         If pageindex = 1 Then
             If j > 1 Then
                 session.findById("wnd[0]/tbar[0]/btn[82]").press   ' click the next page button
-                Set items = session.findById("wnd[0]/usr").FindByNameEx("SAPMV45ATCTRL_U_ERF_AUFTRAG", 80)
+                'Set items = session.findById("wnd[0]/usr").FindByNameEx("SAPMV45ATCTRL_U_ERF_AUFTRAG", 80)
             End If
             CurrentRow = 0
         Else
@@ -623,8 +623,10 @@ Sub va03_download_sales_order(last_zmt1_row As Integer)
         End If
         Set items = session.findById("wnd[0]/usr").FindByNameEx("SAPMV45ATCTRL_U_ERF_AUFTRAG", 80)
         Set cur_row = items.Rows(CurrentRow)
-        If detect_column_finished = False Then
+        'If detect_column_finished = False Then
             'detect column index
+            batch = ""   'the col only exists in cur_row if has value
+            rej_reason = ""  'the col only exists in cur_row if has value
             col_count = 0
             For ii = 0 To cur_row.Count - 1     'get the col index due to different user settings
                 col_count = col_count + 1
@@ -632,18 +634,24 @@ Sub va03_download_sales_order(last_zmt1_row As Integer)
                     col_item = ii + 0
                 ElseIf cur_row(ii + 0).Name = "RV45A-MABNR" Then
                     col_mat = ii + 0
+                    material = cur_row(col_mat + 0).Text   'auto remove the prefix 0
                 ElseIf cur_row(ii + 0).Name = "RV45A-KWMENG" Then
                     col_qty = ii + 0
+                    qty = cur_row(col_qty + 0).Text
+                    qty = Int(Replace(qty, ",", "."))  'handle the case user decimal format setting 99.999,999 which used ' as .
                 ElseIf cur_row(ii + 0).Name = "VBAP-VRKME" Then
                     col_uom = ii + 0
                 ElseIf cur_row(ii + 0).Name = "VBAP-ARKTX" Then
                     col_desc = ii + 0
                 ElseIf cur_row(ii + 0).Name = "VBAP-PSTYV" Then
                     col_item_category = ii + 0
+                    item_category = cur_row(col_item_category + 0).Text
                 ElseIf cur_row(ii + 0).Name = "VBAP-CHARG" Then
                     col_batch = ii + 0
+                    batch = cur_row(col_batch + 0).Text   'needed when packing via single entry form in VL02N, otherwise there is error no item could be found
                 ElseIf cur_row(ii + 0).Name = "VBAP-ABGRU" Then
                     col_rej_reason = ii + 0
+                    rej_reason = cur_row(col_rej_reason + 0).Text
                 Else
                     col_count = col_count - 1
                 End If
@@ -653,16 +661,12 @@ Sub va03_download_sales_order(last_zmt1_row As Integer)
                 End If
             Next ii
             'end of detect column index   if there is empty column content, the each row column index is different!
-        End If
-        material = cur_row(col_mat + 0).Text
-        item_category = cur_row(col_item_category + 0).Text
-        rej_reason = cur_row(col_rej_reason + 0).Text
-        batch = cur_row(col_batch + 0).Text   'needed when packing via single entry form in VL02N, otherwise there is error no item could be found
-        If batch <> "" And UCase(batch) <> "BONDED" And UCase(batch) <> "NONBONDED" Then 'strange, when batch field is empty, the next field content fetched
-            batch = ""
-        End If
-        qty = cur_row(col_qty + 0).Text
-        qty = Int(Replace(qty, ",", "."))  'handle the case user decimal format setting 99.999,999 which used ' as .
+        'End If
+                
+        'If batch <> "" And UCase(batch) <> "BONDED" And UCase(batch) <> "NONBONDED" Then 'strange, when batch field is empty, the next field content fetched
+        '    batch = ""
+        'End If
+        
         'sales block materials are dummy material for pricing only, not packing relevant, so it need to be excluded, also rejected item to be excluded
         If (item_category <> "ZKO" And item_category <> "ZVO" And item_category <> "ZAW") And rej_reason = "" Then
             is_zmt1_material = False
@@ -683,8 +687,10 @@ Sub va03_download_sales_order(last_zmt1_row As Integer)
                     Cells(seq, 1) = material
                     Cells(seq, 4) = 1
                     Cells(seq, 6) = "from sales order"
+                    Cells(seq, 13) = "from sales order"
                     If material = "10992712" Then
                         Cells(seq, 6) = "do not update VL02N"
+                        Cells(seq, 13) = "do not update VL02N"
                     End If
                     Cells(seq, 7) = cur_row(col_desc + 0).Text
                     Cells(seq, 12) = batch
@@ -694,6 +700,7 @@ Sub va03_download_sales_order(last_zmt1_row As Integer)
                 Cells(zmt1_row, 12) = batch
                 Cells(zmt1_row, 4) = 1 'set default qty = 1
                 Cells(zmt1_row, 6) = "from zmt1 & sales order"
+                Cells(zmt1_row, 13) = "from zmt1 & sales order"
             End If
         End If
      Next j
@@ -701,6 +708,7 @@ Sub va03_download_sales_order(last_zmt1_row As Integer)
      For k = 6 To last_zmt1_row
         If Cells(k, 6) <> "from zmt1 & sales order" And Cells(k, 6) <> "from sales order" Then
             Cells(k, 6) = "do not update VL02N"
+            Cells(k, 13) = "do not update VL02N"
             Cells(k, 4) = 1 'set default qty = 1
         End If
      Next k
@@ -715,6 +723,7 @@ Sub va03_download_sales_order(last_zmt1_row As Integer)
         Cells(seq, 4) = 1
         Cells(seq, 7) = ws.Cells(i, 2)
         Cells(seq, 6) = "do not update VL02N"
+        Cells(seq, 13) = "do not update VL02N"
         seq = seq + 1
      Next i
 End Sub
@@ -779,7 +788,7 @@ Sub VL02N()
     'check box info completeness
     no_box_rows = ""
     For i = 6 To ActiveSheet.UsedRange.Rows.Count
-        If Cells(i, 5) = "" And Cells(i, 6) <> "do not update VL02N" Then
+        If Cells(i, 5) = "" And Cells(i, 13) <> "do not update VL02N" Then
             no_box_rows = no_box_rows + " row:" + Str(i) + " " + Cells(i, 1).Text + Chr(13)
         End If
     Next i
@@ -817,9 +826,12 @@ Sub VL02N()
     End If
     session.findById("wnd[0]/usr/tabsTS_HU_VERP/tabpUE6VDIR").Select  'single entry tab sheet
     Dim ws As Worksheet
-    Set ws = Sheets("auto packing")
+    Set ws = Sheets("box-size-weight")
     last_row = ws.UsedRange.Rows.Count
     For i = 6 To ActiveSheet.UsedRange.Rows.Count
+        If Cells(i, 1) = "" Then  '
+            Exit For
+        End If
         If Cells(i, 6) <> "do not update VL02N" Then
             For m = 2 To last_row:  'get content of box ID from auto packing
                 If ws.Cells(m, 1) = Cells(i, 5) Then
@@ -828,7 +840,7 @@ Sub VL02N()
                 End If
             Next m
             session.findById("wnd[0]/usr/tabsTS_HU_VERP/tabpUE6VDIR/ssubTAB:SAPLV51G:6050/ctxtVEKP-EXIDV").Text = Cells(i, 5) 'box id
-            session.findById("wnd[0]/usr/tabsTS_HU_VERP/tabpUE6VDIR/ssubTAB:SAPLV51G:6050/ctxtVEKP-INHALT").Text = Content    'content, box mark/label
+            session.findById("wnd[0]/usr/tabsTS_HU_VERP/tabpUE6VDIR/ssubTAB:SAPLV51G:6050/txtVEKP-INHALT").Text = Content    'content, box mark/label
             session.findById("wnd[0]/usr/tabsTS_HU_VERP/tabpUE6VDIR/ssubTAB:SAPLV51G:6050/ctxtVEKP-VHILM").Text = "10281249" 'package material
             session.findById("wnd[0]/usr/tabsTS_HU_VERP/tabpUE6VDIR/ssubTAB:SAPLV51G:6050/ctxtHUMV4-MATNR").Text = Cells(i, 1) 'material number
             batch = Cells(i, 12).Text
@@ -921,3 +933,4 @@ Sub VL02N_preprocess()
         End If
     Next i
 End Sub
+
