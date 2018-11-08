@@ -1,0 +1,115 @@
+Sub VA02_Change_Schedule_lines()
+    Set SapGuiAuto = GetObject("SAPGUI")  'Get the SAP GUI Scripting object
+    Set SAPApp = SapGuiAuto.GetScriptingEngine 'Get the currently running SAP GUI
+    Set SAPCon = SAPApp.Children(0) 'Get the first system that is currently connected
+    Set session = SAPCon.Children(0) 'Get the first session (window) on that connection
+    
+    last_row = ActiveSheet.UsedRange.Rows.Count
+    old_qty = 0
+    new_qty = 0
+    current_sales_order = ""
+    For i = 2 To last_row
+        If Cells(i, 1) = "" Then
+            Exit For
+        End If
+        If Cells(i, 1) <> Cells(i - 1, 1) Then  'processing new order
+            current_sales_order = Cells(i, 1)
+            session.findById("wnd[0]").maximize
+            session.findById("wnd[0]/tbar[0]/okcd").Text = "/nva02"
+            session.findById("wnd[0]").sendVKey 0
+            session.findById("wnd[0]/usr/ctxtVBAK-VBELN").Text = current_sales_order '"8130147"
+            session.findById("wnd[0]").sendVKey 0
+            err_msg = ""
+        End If
+        
+        current_sales_order_item = Cells(i, 2)
+        
+        If Cells(i, 1) <> Cells(i - 1, 1) And Cells(i, 2) <> Cells(i - 1, 2) Then  'processing new order /item
+        ' make sure new quantity matches old quantity per sales order item
+            old_qty = 0
+            new_qty = 0
+            For j = i To last_row
+                old_qty = old_qty + Cells(j, 5)
+                new_qty = new_qty + Cells(j, 7)
+                If current_sales_order <> Cells(j + 1, 1) And current_sales_order_item <> Cells(j + 1, 2) Then
+                    If old_qty <> new_qty Then
+                        err_msg = "For sales Order-Item:" & current_sales_order & "-" & current_sales_order_item & _
+                                " the total new qty:" & CStr(new_qty) & " <> old qty:" & CStr(old_qty)
+                        Cells(j, 8) = err_msg
+                        i = j
+                        GoTo next_sales_item
+                    End If
+                End If
+            Next j
+            If Cells(i, 1) = Cells(i - 1, 1) Then                          'switch to new item in same order
+                session.findById("wnd[0]/mbar/menu[2]/menu[0]").Select
+            End If
+            session.findById("wnd[0]/usr/tabsTAXI_TABSTRIP_OVERVIEW/tabpT\01/ssubSUBSCREEN_BODY:SAPMV45A:4400/subSUBSCREEN_TC:SAPMV45A:4900/subSUBSCREEN_BUTTONS:SAPMV45A:4050/btnBT_POPO").press
+            session.findById("wnd[1]/usr/txtRV45A-POSNR").Text = current_sales_order_item
+            session.findById("wnd[1]").sendVKey 0
+            'error handling when item does not exist
+            session.findById("wnd[0]/usr/tabsTAXI_TABSTRIP_OVERVIEW/tabpT\01/ssubSUBSCREEN_BODY:SAPMV45A:4400/subSUBSCREEN_TC:SAPMV45A:4900/subSUBSCREEN_BUTTONS:SAPMV45A:4050/btnBT_PEIN").press
+        End If
+        old_date = Cells(i, 4)
+        new_date = Cells(i, 6)
+        old_qty = Cells(i, 5)
+        new_qty = Cells(i, 7)
+        If old_date <> "" Then  'old date is empty
+            session.findById("wnd[0]/usr/tabsTAXI_TABSTRIP_ITEM/tabpT\07/ssubSUBSCREEN_BODY:SAPMV45A:4500/btnBT_EIPO").press
+            session.findById("wnd[1]/usr/ctxtRV45A-ETDAT").Text = old_date '"140518"
+            session.findById("wnd[1]").sendVKey 0
+            On Error Resume Next
+                session.findById ("wnd[2]/tbar[0]/btn[0]")
+            If Err.Number = 0 Then
+                session.findById("wnd[2]/tbar[0]/btn[0]").press
+                err_msg = "The date format does not match SAP format or old date not exist in current schedule line lists"
+                Cells(i, 8) = err_msg
+            Else
+                session.findById("wnd[0]/usr/tabsTAXI_TABSTRIP_ITEM/tabpT\07/ssubSUBSCREEN_BODY:SAPMV45A:4500/tblSAPMV45ATCTRL_PEIN/txtVBEP-WMENG[2,0]").Text = new_qty '"10.000"
+                session.findById("wnd[0]").sendVKey 0
+                msg = session.findById("wnd[0]/sbar").Text
+                If msg = "" Then
+                    msg = "schedule line update OK"
+                End If
+                Cells(i, 8) = msg
+            End If
+        Else
+            session.findById("wnd[0]/usr/tabsTAXI_TABSTRIP_ITEM/tabpT\07/ssubSUBSCREEN_BODY:SAPMV45A:4500/btnBT_EIAN").press
+            session.findById("wnd[0]/usr/tabsTAXI_TABSTRIP_ITEM/tabpT\07/ssubSUBSCREEN_BODY:SAPMV45A:4500/tblSAPMV45ATCTRL_PEIN/ctxtRV45A-ETDAT[1,1]").Text = new_date '"171118"
+            session.findById("wnd[0]/usr/tabsTAXI_TABSTRIP_ITEM/tabpT\07/ssubSUBSCREEN_BODY:SAPMV45A:4500/tblSAPMV45ATCTRL_PEIN/txtVBEP-WMENG[2,1]").Text = new_qty
+            session.findById("wnd[0]").sendVKey 0
+            On Error Resume Next
+                session.findById ("wnd[1]")
+            If Err.Number = 0 Then
+                err_msg = session.findById("wnd[1]").PopupDialogText
+                session.findById("wnd[1]").Close
+                Cells(i, 8) = err_msg
+            Else
+                msg = session.findById("wnd[0]/sbar").Text
+                If msg = "" Then
+                    msg = "schedule line update OK"
+                End If
+                Cells(i, 8) = msg
+            End If
+        End If
+        If Cells(i + 1, 1) <> current_sales_order Then
+            If err_msg = "" Then
+                session.findById("wnd[0]/tbar[0]/btn[11]").press
+                Cells(i, 9) = session.findById("wnd[0]/sbar").Text
+            Else
+                Cells(i, 9) = "Failed update sales order, check the item level error message "
+            End If
+        End If
+next_sales_item:
+    Next i
+    
+    If Not SAPApp Is Nothing Then
+        SAPApp.HistoryEnabled = True  'improve the performance
+        Set session = Nothing
+        Set SAPCon = Nothing
+        Set SAPApp = Nothing
+        Set SapGuiAuto = Nothing
+        'Application.ScreenUpdating = True
+        MsgBox "Process Completed"
+    End If
+End Sub
