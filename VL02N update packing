@@ -1,0 +1,933 @@
+Global SapGuiAuto As Object
+Global SAPApp As Object
+Global SAPConion As Object
+Global session As Object
+Global zmt1_last_row As Integer
+Sub open_sap()
+    On Error Resume Next
+        Set SapGuiAuto = GetObject("SAPGUI")  'Get the SAP GUI Scripting object
+    If Err.Number <> 0 Then
+        MsgBox "Please login SAP before running this script!"
+        End
+    End If
+    Set SAPApp = SapGuiAuto.GetScriptingEngine 'Get the currently running SAP GUI
+    SAPApp.HistoryEnabled = False  'improve the performance
+    If Not SAPApp Is Nothing Then
+        Set SAPCon = SAPApp.Children(0) 'Get the first system that is currently connected
+    End If
+    If Not SAPCon Is Nothing Then
+        Set session = SAPCon.Children(0) 'Get the first session (window) on that connection
+    End If
+    If session Is Nothing Then
+        MsgBox "Please login SAP before running this script!"
+        End
+    End If
+End Sub
+
+Sub close_sap()
+    If Not SAPApp Is Nothing Then
+        SAPApp.HistoryEnabled = True  'improve the performance
+        Set session = Nothing
+        Set SAPCon = Nothing
+        Set SAPApp = Nothing
+        Set SapGuiAuto = Nothing
+        'Application.ScreenUpdating = True
+        MsgBox "Process Completed"
+    End If
+End Sub
+
+
+Function ZMT1_System_Order()
+    If ActiveSheet.Cells(1, 2).Value = "" Then
+        MsgBox "please input sales order number into cell B1"
+        Exit Function
+    End If
+    open_sap
+    Set stack_material = CreateObject("System.Collections.Stack")
+    Set stack_row = CreateObject("System.Collections.Stack")
+    Set stack_Mode = CreateObject("System.Collections.Stack")
+    Set stack_serialno = CreateObject("System.Collections.Stack")
+    Set stack_versionno = CreateObject("System.Collections.Stack")
+    Set stack_pagenumber = CreateObject("System.Collections.Stack")
+    
+    error_missing_subitem = "Please enter subitems (customer anonymous)"
+    error_subitem_incomplete = "Serial number not released: incomplete production ID data"
+    
+    plant = ActiveSheet.Cells(2, 2).Value
+    If plant = "" Then plant = "30R2"
+    CurrentRow = 1
+    AboveRow = 0
+    ZMT1_Mode = "SalesOrder"
+    finshed = False
+    error_material = "1"
+    outer_counter = 0
+    pagenumber = 0
+    excel_last_row = ActiveSheet.UsedRange.Rows.Count + 1
+    auto_serial_done = False
+    ActiveSheet.Cells(1, 6).Value = "ZMT1 in process....."
+    max_row_on_screen = 0
+    detect_max_row_on_screen = False
+    special_handling_done = False   '20161201 ZMT1 maintained OK by CV,but one of its subcomponent 10126959'SN is dummy, need to be  updated, so sepcially trigger ZMT1 anonymous entry needed
+    
+    Do While out_counter < 500 And finished = False
+        If ZMT1_Mode = "SalesOrder" Then
+            'session.findById("wnd[0]").resizeWorkingPane 231, 42, False
+            session.findById("wnd[0]").maximize
+            session.findById("wnd[0]/tbar[0]/okcd").Text = "/nzmt1"
+            session.findById("wnd[0]").sendVKey 0
+            session.findById("wnd[0]/usr/radRADIO2").Select
+            session.findById("wnd[0]/usr/radRADIO2").SetFocus    'choose enter by sales order
+            session.findById("wnd[0]").sendVKey 0   ' press ENTER to execute
+            session.findById("wnd[0]/usr/txtZMZWP-ZAUFTRAGSN").Text = ActiveSheet.Cells(1, 2).Value '"7040112"   'sales order
+            session.findById("wnd[0]/usr/txtZMZWP-ZAUFTRAGSN").caretPosition = 7
+            session.findById("wnd[0]").sendVKey 0   '
+            On Error Resume Next
+                session.findById ("wnd[1]/tbar[0]/btn[0]")
+            If Err.Number = 0 Then
+                session.findById("wnd[1]/tbar[0]/btn[0]").press   'popup window to warn order not yet started acquire data
+            End If
+            session.findById("wnd[0]").sendVKey 0  ' in case there is popup window
+            session.findById("wnd[0]/tbar[1]/btn[5]").press   'click pensil button to switch to EDIT mode
+            If auto_serial_done = False Then
+                On Error Resume Next    ' click auto serial number button only once
+                    session.findById ("wnd[0]/tbar[1]/btn[26]")
+                If Err.Number = 0 Then
+                    session.findById("wnd[0]/tbar[1]/btn[26]").press
+                End If
+                auto_serial_done = True
+            End If
+            
+            If detect_max_row_on_screen = False Then   'detect the max row on screen
+                DetectRow = 1
+                Do While DetectRow < 50
+                    On Error Resume Next
+                        session.findById ("wnd[0]/usr/sub:ZMTDD000:9210/txtZMZWP-ZSERIALNR[" & CStr(DetectRow) & ",13]")
+                    If Err.Number = 0 Then
+                        DetectRow = DetectRow + 2
+                    Else
+                        Exit Do
+                    End If
+                Loop
+                If DetectRow > 15 Then
+                    max_row_on_screen = DetectRow - 2
+                Else
+                    max_row_on_screen = 33   'default value
+                End If
+                detect_max_row_on_screen = True
+            End If
+            
+            
+            counter = pagenumber
+            Do While counter > 0  'restore the pages to work on
+                session.findById("wnd[0]/tbar[0]/btn[82]").press   ' click the next page button
+                counter = counter - 1
+            Loop
+            counter = 0
+            previous_material = session.findById("wnd[0]/usr/sub:ZMTDD000:9210/txtZMZWP-ZMATNR[0,7]").Text  '1st row material on previous page
+            Do While CurrentRow < 200
+                On Error Resume Next
+                    session.findById ("wnd[0]/usr/sub:ZMTDD000:9210/txtZMZWP-ZSERIALNR[" & CStr(CurrentRow) & ",13]")
+                If Err.Number = 0 Then
+                    'session.findById("wnd[0]/usr/sub:ZMTDD000:9210/txtZMZWP-ZPOS_STAT[" & CStr(CurrentRow) & ",72]").SetFocus
+                    'session.findById("wnd[0]").sendVKey 0    'process the auto serial number item or items no need serial number
+                    current_material = session.findById("wnd[0]/usr/sub:ZMTDD000:9210/txtZMZWP-ZMATNR[" & CStr(CurrentRow - 1) & ",7]").Text
+                    ' set NA as default software version 20161206
+                    If session.findById("wnd[0]/usr/sub:ZMTDD000:9210/txtZMZWP-ZSW[" & CStr(CurrentRow) & ",37]").Changeable = True And _
+                       session.findById("wnd[0]/usr/sub:ZMTDD000:9210/txtZMZWP-ZSW[" & CStr(CurrentRow) & ",37]").Text = "" Then
+                        session.findById("wnd[0]/usr/sub:ZMTDD000:9210/txtZMZWP-ZSW[" & CStr(CurrentRow) & ",37]").Text = ""
+                    End If
+                    
+                    If ((session.findById("wnd[0]/usr/sub:ZMTDD000:9210/txtZMZWP-ZSERIALNR[" & CStr(CurrentRow) & ",13]").Changeable = True _
+                      And session.findById("wnd[0]/usr/sub:ZMTDD000:9210/txtZMZWP-ZSERIALNR[" & CStr(CurrentRow) & ",13]").Text = "") _
+                      Or session.findById("wnd[0]/usr/sub:ZMTDD000:9210/txtZMZWP-ZES[" & CStr(CurrentRow) & ",48]").Changeable = True _
+                      And session.findById("wnd[0]/usr/sub:ZMTDD000:9210/txtZMZWP-ZES[" & CStr(CurrentRow) & ",48]").Text = "") _
+                      And session.findById("wnd[0]/usr/sub:ZMTDD000:9210/txtZMZWP-ZPOS_STAT[" & CStr(CurrentRow - 1) & ",72]").Text <> "OKAY" Then 'bypass auto serial number case
+                        If Len(current_material) = 8 And Left(current_material, 1) = "0" Then
+                            find_material = Right(current_material, 7)
+                        Else
+                            find_material = current_material
+                        End If
+                        Set found = ActiveSheet.Columns("A").Find(what:=find_material, LookIn:=xlValues, lookat:=xlWhole, SearchOrder:=xlByRows, SearchDirection:=xlNext, MatchCase:=False, SearchFormat:=False)
+                        If Not found Is Nothing And (ActiveSheet.Cells(found.Row, 6).Value = "Processed OK" Or ActiveSheet.Cells(found.Row, 6).Value = "Failed find material") Then
+                            Set initialfound = found
+                            Do
+                                Set found = ActiveSheet.Columns("A").FindNext(After:=found)
+                                If Not found Is Nothing Then
+                                    If found.Address = initialfound.Address Then
+                                        If ActiveSheet.Cells(found.Row, 6).Value = "Processed OK" Or ActiveSheet.Cells(found.Row, 6).Value = "Failed find material" Then ' the only found item is processed so final result is not found
+                                            Set found = Nothing
+                                        End If
+                                        Exit Do 'handle the case of only 1 line found
+                                    End If
+                                    If Not (ActiveSheet.Cells(found.Row, 6).Value = "Processed OK" Or ActiveSheet.Cells(found.Row, 6).Value = "Failed find material") Then 'if found the item, keep the status and exit
+                                        Exit Do
+                                    End If
+                                Else
+                                    Exit Do
+                                End If
+                            Loop
+                        End If
+                        If found Is Nothing Then   ' material not available in Excel
+                            'session.findById("wnd[0]/usr/sub:ZMTDD000:9210/chkZMZWP-ZFEHLT_KZ[" & CStr(CurrentRow) & ",1]").Selected = True   'mark the item to bypass it
+                            excel_last_row = excel_last_row + 1
+                            Excel_row = excel_last_row
+                            ActiveSheet.Cells(Excel_row, 1).Value = current_material
+                            ActiveSheet.Cells(Excel_row, 6).Value = "Failed find material"
+                            serialno = "DUMMMMY"    'use dummy to trigger the lower level item entry to detect which material need ZMT1 entry
+                            versionno = "NA"
+                        Else    ' serial no & version no available in Excel
+                            Excel_row = found.Row
+                            serialno = Trim(ActiveSheet.Cells(Excel_row, 2))
+                            versionno = Trim(ActiveSheet.Cells(Excel_row, 3))
+                            If LCase(versionno) = "n.a" Then
+                                versionno = "NA"
+                            End If
+                        End If
+                        ActiveSheet.Cells(Excel_row, 7).Value = session.findById("wnd[0]/usr/sub:ZMTDD000:9210/txtZMZWP-ZMATKT[" & CStr(CurrentRow - 1) & ",26]").Text
+                        If serialno = "" And versionno = "" Then   ' return back to the error item
+                           If serialno = "" And versionno = "" Then ActiveSheet.Cells(Excel_row, 6).Value = "Failed find material"  'to mark it as failed processing for multi quantity case
+                        Else
+                            If session.findById("wnd[0]/usr/sub:ZMTDD000:9210/txtZMZWP-ZSERIALNR[" & CStr(CurrentRow) & ",13]").Changeable = True Then
+                                session.findById("wnd[0]/usr/sub:ZMTDD000:9210/txtZMZWP-ZSERIALNR[" & CStr(CurrentRow) & ",13]").Text = serialno '"60181233"  ' input serial number
+                                ActiveSheet.Cells(Excel_row, 9).Value = "J"
+                                ActiveSheet.Cells(Excel_row, 2).Interior.Color = 65535
+                            End If
+                            If session.findById("wnd[0]/usr/sub:ZMTDD000:9210/txtZMZWP-ZES[" & CStr(CurrentRow) & ",48]").Changeable = True Then
+                                session.findById("wnd[0]/usr/sub:ZMTDD000:9210/txtZMZWP-ZES[" & CStr(CurrentRow) & ",48]").Text = versionno '             ' input version
+                                ActiveSheet.Cells(Excel_row, 10).Value = "J"
+                                ActiveSheet.Cells(Excel_row, 3).Interior.Color = 65535
+                            End If
+                            '20181101 fisher PO and GR date column redefined as pack qty and BOX ID, thus in ZMT1 need to be manually processed
+                            If session.findById("wnd[0]/usr/sub:ZMTDD000:9210/txtZMZWP-ZBSTNR[" & CStr(CurrentRow) & ",84]").Changeable = True And _
+                                session.findById("wnd[0]/usr/sub:ZMTDD000:9210/txtZMZWP-ZBSTNR[" & CStr(CurrentRow) & ",84]").Text = "" Then
+                                'session.findById("wnd[0]/usr/sub:ZMTDD000:9210/txtZMZWP-ZBSTNR[" & CStr(CurrentRow) & ",84]").Text = ActiveSheet.Cells(Excel_row, 4)   '"4503051145"
+                                ActiveSheet.Cells(Excel_row, 11).Value = "J"
+                                ActiveSheet.Cells(Excel_row, 4).Interior.Color = 65535
+                                ActiveSheet.Cells(Excel_row, 5).Interior.Color = 65535
+                            End If
+                            If session.findById("wnd[0]/usr/sub:ZMTDD000:9210/txtZMZWP-ZGEW_BEGINN[" & CStr(CurrentRow) & ",97]").Changeable = True And _
+                                session.findById("wnd[0]/usr/sub:ZMTDD000:9210/txtZMZWP-ZGEW_BEGINN[" & CStr(CurrentRow) & ",97]").Text = "" Then
+                                'session.findById("wnd[0]/usr/sub:ZMTDD000:9210/txtZMZWP-ZGEW_BEGINN[" & CStr(CurrentRow) & ",97]").Text = ActiveSheet.Cells(Excel_row, 5)   '
+                            End If
+                            'session.findById("wnd[0]/usr/sub:ZMTDD000:9210/txtZMZWP-ZES[1,48]").SetFocus
+                            'session.findById("wnd[0]/usr/sub:ZMTDD000:9210/txtZMZWP-ZES[1,48]").caretPosition = 2
+                            session.findById("wnd[0]").sendVKey 0
+                            StatusText = session.findById("wnd[0]/sbar").Text
+                            If session.findById("wnd[0]/sbar").MessageType = "E" Or session.findById("wnd[0]/sbar").MessageType = "A" Then   ' handle error cases
+                                session.findById("wnd[0]/usr/sub:ZMTDD000:9210/txtZMZWP-ZSERIALNR[" & CStr(CurrentRow) & ",13]").Text = ""  ' clear serial number
+                                session.findById("wnd[0]/usr/sub:ZMTDD000:9210/txtZMZWP-ZES[" & CStr(CurrentRow) & ",48]").Text = ""            ' clear version in order to temporarily save ZMT1
+                                'session.findById("wnd[0]/usr/sub:ZMTDD000:9210/chkZMZWP-ZFEHLT_KZ[" & CStr(CurrentRow) & ",1]").Selected = True
+                                session.findById("wnd[0]").sendVKey 0
+                               ' for AT, no need to handle the component level
+                               ' If (StatusText = error_missing_subitem Or StatusText = error_subitem_incomplete) _
+                               '     And (ActiveSheet.Cells(Excel_row, 6).Value <> error_missing_subitem And ActiveSheet.Cells(Excel_row, 6).Value <> error_subitem_incomplete) Then    'sub component still with error
+                               '         error_material = current_material
+                               '         error_serialno = serialno
+                               '         error_versionno = versionno
+                               '         error_row = CurrentRow
+                               '         'excel_row = found.Row
+                               '         stack_Mode.push "SalesOrder"
+                               '         stack_row.push CStr(CurrentRow)
+                               '         stack_pagenumber.push CStr(pagenumber)
+                               '         stack_material.push ""
+                               '         stack_serialno.push ""
+                               '         stack_versionno.push ""
+                               '         ZMT1_Mode = "Anonymous"
+                               '         pagenumber = 0
+                               '         CurrentRow = 1
+                               '         ActiveSheet.Cells(Excel_row, 6).Value = StatusText
+                               '         If serialno <> "DUMMMMY" Then
+                               '             session.findById("wnd[0]/tbar[0]/btn[11]").press   'temp save
+                               '             session.findById("wnd[1]/tbar[0]/btn[0]").press    'close the popup info window
+                               '         End If
+                               '         Exit Do
+                               ' End If  ' handling the error
+                                ActiveSheet.Cells(Excel_row, 6).Value = StatusText
+                            ElseIf session.findById("wnd[0]/usr/sub:ZMTDD000:9210/txtZMZWP-ZBSTNR[" & CStr(CurrentRow) & ",84]").Changeable = True And _
+                                session.findById("wnd[0]/usr/sub:ZMTDD000:9210/txtZMZWP-ZBSTNR[" & CStr(CurrentRow) & ",84]").Text = "" And serialno <> "DUMMMMY" Then
+                                ActiveSheet.Cells(Excel_row, 6).Value = "PO info not provided even though PO required for this material"
+                            ElseIf (StatusText = "" Or session.findById("wnd[0]/sbar").MessageType = "S") And serialno <> "DUMMMMY" _
+                                And (serialno <> "" Or versionno <> "") Then  ' at least serial number and version no not null for the second run
+                                ActiveSheet.Cells(Excel_row, 6).Value = "Processed OK"
+                                'session.findById("wnd[0]/usr/sub:ZMTDD000:9210/chkZMZWP-ZFEHLT_KZ[" & CStr(CurrentRow) & ",1]").Selected = False
+                            End If
+                        End If                              ' return back to the error item for detecting mode
+                        If serialno = "DUMMMMY" Then ' clear dummy item
+                            session.findById("wnd[0]/usr/sub:ZMTDD000:9210/txtZMZWP-ZSERIALNR[" & CStr(CurrentRow) & ",13]").Text = ""  ' clear serial number
+                            session.findById("wnd[0]/usr/sub:ZMTDD000:9210/txtZMZWP-ZES[" & CStr(CurrentRow) & ",48]").Text = ""            ' clear version in order to temporarily save ZMT1
+                            'ActiveSheet.Cells(Excel_row, 6).Value = "Failed find material"
+                        End If
+                     '20161201 ZMT1 maintained OK by CV,but one of its subcomponent SN is dummy, need to be  updated, so sepcially trigger ZMT1 anonymous entry needed
+                    ElseIf special_handling_done = False And current_material = "10432914" Then
+                        special_handling_done = True
+                        error_material = current_material
+                        error_serialno = session.findById("wnd[0]/usr/sub:ZMTDD000:9210/txtZMZWP-ZSERIALNR[" & CStr(CurrentRow) & ",13]").Text
+                        error_versionno = session.findById("wnd[0]/usr/sub:ZMTDD000:9210/txtZMZWP-ZES[" & CStr(CurrentRow) & ",48]").Text
+                        error_row = CurrentRow
+                        stack_Mode.push "SalesOrder"
+                        stack_row.push CStr(CurrentRow)
+                        stack_pagenumber.push CStr(pagenumber)
+                        stack_material.push ""
+                        stack_serialno.push ""
+                        stack_versionno.push ""
+                        ZMT1_Mode = "Anonymous"
+                        pagenumber = 0
+                        CurrentRow = 1
+                        'ActiveSheet.Cells(Excel_row, 6).Value = StatusText
+                        session.findById("wnd[0]/tbar[0]/btn[11]").press   'temp save
+                        session.findById("wnd[1]/tbar[0]/btn[0]").press    'close the popup info window
+                        Exit Do
+                    '20161201 ZMT1 maintained OK by CV,but one of its subcomponent SN is dummy, need to be  updated, so sepcially trigger ZMT1 anonymous entry needed
+                    End If ' bypass the auto serial number items
+                    CurrentRow = CurrentRow + 2
+                Else
+                    end_of_ZMT1 = True
+                    If CurrentRow > max_row_on_screen Then    ' end of page
+                        ' check whether the last row reached, or need to move to the next page
+                        session.findById("wnd[0]/tbar[0]/btn[82]").press   ' click the next page button
+                        pagenumber = pagenumber + 1
+                        current_material = session.findById("wnd[0]/usr/sub:ZMTDD000:9210/txtZMZWP-ZMATNR[0,7]").Text  '1st row material on current page
+                        If previous_material <> current_material And current_material <> "" Then
+                            end_of_ZMT1 = False
+                            CurrentRow = 1
+                            previous_material = current_material
+                        End If    'for both cases: without item, reached the last item
+                    End If
+                    If end_of_ZMT1 = True Then
+                        If error_serialno <> "DUMMMMY" Then
+                            session.findById("wnd[0]/tbar[0]/btn[11]").press
+                            session.findById("wnd[1]/tbar[0]/btn[0]").press
+                            ActiveSheet.Cells(1, 6).Value = "ZMT1 processed OK"
+                        Else
+                            ActiveSheet.Cells(1, 6).Value = "Detecting ZMT1 relevant material processed OK"
+                        End If
+                        finished = True
+                        Exit Do
+                    End If
+                End If
+                counter = counter + 1
+                out_counter = out_counter + 1
+            Loop
+        Else ' ZMT1_Mode = "Anonymous"
+            session.findById("wnd[0]/tbar[0]/okcd").Text = "/nzmt1"    'invoke ZMT1 anonymous entry
+            session.findById("wnd[0]").sendVKey 0    'confirm the tcode
+            session.findById("wnd[0]").sendVKey 0    'confirm the anonymous entry option
+            session.findById("wnd[0]/usr/txtZMZWS-ZMATNR_O").Text = error_material '"10164200"
+            session.findById("wnd[0]/usr/txtZMZWS-ZSERNR_O").Text = error_serialno '"601829"
+            session.findById("wnd[0]/usr/ctxtZMZWS-ZWERK").Text = plant ' "30r1"
+            session.findById("wnd[0]/usr/ctxtZMZWS-ZWERK").SetFocus
+            session.findById("wnd[0]/usr/ctxtZMZWS-ZWERK").caretPosition = 4
+            session.findById("wnd[0]").sendVKey 0
+            On Error Resume Next              ' in case there is popup window to confirm the alterNAtive BOM used
+                session.findById ("wnd[1]/usr/btnSPOP-OPTION1")
+            If Err.Number = 0 Then            ' in case there are multi BOM available for selection
+                session.findById("wnd[1]/usr/btnSPOP-OPTION1").press
+                On Error Resume Next
+                    session.findById ("wnd[1]/usr/sub:ZMTDD000:9116/chkARBE_WERK-AUSWAHL[0,0]")
+                If Err.Number = 0 Then  'select the 1st BOM
+                    session.findById("wnd[1]/usr/sub:ZMTDD000:9116/chkARBE_WERK-AUSWAHL[0,0]").Selected = True
+                    session.findById("wnd[1]/tbar[0]/btn[0]").press
+                End If
+                On Error Resume Next
+                    session.findById ("wnd[1]/tbar[0]/btn[0]")
+                If Err.Number = 0 Then
+                    session.findById("wnd[1]/tbar[0]/btn[0]").press
+                End If
+            End If
+            On Error Resume Next              'Need PO for header material
+                session.findById ("wnd[1]/usr/txtZMZWS-ZBSTNR")
+            If Err.Number = 0 Then
+                If error_serialno = "DUMMMMY" Then
+                    session.findById("wnd[1]/usr/txtZMZWS-ZBSTNR").Text = "4503051145" '"use one existing PO
+                    'session.findById("wnd[1]/usr/txtZMZWS-ZGEW_BEGINN").Text = "" ' use the system default, current day
+                    ActiveSheet.Cells(Excel_row, 11).Value = "J"    ' mark this mateial need PO.
+                Else
+                    session.findById("wnd[1]/usr/txtZMZWS-ZBSTNR").Text = ActiveSheet.Cells(Excel_row, 4) '"4500000000"
+                    session.findById("wnd[1]/usr/txtZMZWS-ZGEW_BEGINN").Text = ActiveSheet.Cells(Excel_row, 5) 'GR Date
+                End If
+                session.findById("wnd[1]").sendVKey 0
+            End If
+            If session.findById("wnd[0]/usr/txtES_O").Changeable = True Then
+                session.findById("wnd[0]/usr/txtES_O").Text = error_versionno '"25"   'header material version
+                session.findById("wnd[0]").sendVKey 0   '20170515 之前反应的外壳，仓库基本输入了PO 号，程序会帮输入RL， 但是基本没有回车， STATUES 都不是OK
+            End If
+            If session.findById("wnd[0]/usr/txtSW_O").Changeable = True And session.findById("wnd[0]/usr/txtSW_O").Text = "" Then
+                session.findById("wnd[0]/usr/txtSW_O").Text = "NA"   '"90"   copy the revision level version field to solfware version field as needed.
+            End If
+            counter = pagenumber
+            Do While counter > 0  'restore the pages to work on
+                session.findById("wnd[0]/tbar[0]/btn[82]").press   ' click the next page button
+                counter = counter - 1
+            Loop
+            counter = 0
+            previous_material = session.findById("wnd[0]/usr/sub:ZMTDD000:9110/txtZMZWS-ZMATNR_U[0,0]").Text  '1st row material on previous page
+            Do While CurrentRow < 211
+                On Error Resume Next
+                    session.findById ("wnd[0]/usr/sub:ZMTDD000:9110/txtZMZWS-ZSERIALNR[" & CStr(CurrentRow) & ",15]")
+                If Err.Number = 0 Then
+                    'set default software version as NA 20161206
+                    If session.findById("wnd[0]/usr/sub:ZMTDD000:9110/txtZMZWS-ZSW[" & CStr(CurrentRow) & ",39]").Changeable = True And _
+                        session.findById("wnd[0]/usr/sub:ZMTDD000:9110/txtZMZWS-ZSW[" & CStr(CurrentRow) & ",39]").Text = "" Then
+                        session.findById("wnd[0]/usr/sub:ZMTDD000:9110/txtZMZWS-ZSW[" & CStr(CurrentRow) & ",39]").Text = ""
+                    End If
+                    
+                    current_material = session.findById("wnd[0]/usr/sub:ZMTDD000:9110/txtZMZWS-ZMATNR_U[" & CStr(CurrentRow - 1) & ",0]").Text
+                    If ((session.findById("wnd[0]/usr/sub:ZMTDD000:9110/txtZMZWS-ZSERIALNR[" & CStr(CurrentRow) & ",15]").Changeable = True _
+                        Or session.findById("wnd[0]/usr/sub:ZMTDD000:9110/txtZMZWS-ZES[" & CStr(CurrentRow) & ",50]").Changeable = True) _
+                        And session.findById("wnd[0]/usr/sub:ZMTDD000:9110/txtZMZWS-ZPOS_STAT[" & CStr(CurrentRow - 1) & ",64]").Text <> "OKAY") _
+                        Or current_material = "10126959" Then ' bypass auto serial number item 20161201 special handling of CV components
+                        'session.findById("wnd[0]/usr/sub:ZMTDD000:9110/chkZMZWS-MARK[1,1]").Selected = True
+                        If Len(current_material) = 8 And Left(current_material, 1) = "0" Then
+                            find_material = Right(current_material, 7)
+                        Else
+                            find_material = current_material
+                        End If
+                        Set found = ActiveSheet.Columns("A").Find(what:=find_material, LookIn:=xlValues, lookat:=xlWhole, SearchOrder:=xlByRows, SearchDirection:=xlNext, MatchCase:=False, SearchFormat:=False)
+                        If Not found Is Nothing And (ActiveSheet.Cells(found.Row, 6).Value = "Processed OK" Or ActiveSheet.Cells(found.Row, 6).Value = "Failed find material") Then
+                            Set initialfound = found
+                            Do
+                                Set found = ActiveSheet.Columns("A").FindNext(After:=found)
+                                If Not found Is Nothing Then
+                                    If found.Address = initialfound.Address Then
+                                        If ActiveSheet.Cells(found.Row, 6).Value = "Processed OK" Or ActiveSheet.Cells(found.Row, 6).Value = "Failed find material" Then ' the only found item is processed so final result is not found
+                                            Set found = Nothing
+                                        End If
+                                        Exit Do 'handle the case of only 1 line found
+                                    End If
+                                    If Not (ActiveSheet.Cells(found.Row, 6).Value = "Processed OK" Or ActiveSheet.Cells(found.Row, 6).Value = "Failed find material") Then 'if found the item, keep the status and exit
+                                        Exit Do
+                                    End If
+                                Else
+                                    Exit Do
+                                End If
+                            Loop
+                        End If
+                        If found Is Nothing Then   ' material not available in Excel
+                            'session.findById("wnd[0]/usr/sub:ZMTDD000:9110/chkZMZWS-MARK[" & CStr(CurrentRow) & ",1]").Selected = True
+                            excel_last_row = excel_last_row + 1
+                            Excel_row = excel_last_row
+                            ActiveSheet.Cells(Excel_row, 1).Value = current_material
+                            ActiveSheet.Cells(Excel_row, 6).Value = "Failed find material"
+                            serialno = "DUMMMMY"    'use dummy to trigger the lower level item entry to detect which material need ZMT1 entry
+                            versionno = "NA"
+                        Else    ' serial no & version no available in Excel
+                            Excel_row = found.Row
+                            serialno = ActiveSheet.Cells(Excel_row, 2)
+                            versionno = ActiveSheet.Cells(Excel_row, 3)
+                            If LCase(versionno) = "n.a" Then
+                                versionno = "NA"
+                            End If
+                        End If
+                        If serialno = "" And versionno = "" Then   ' return back to the error item
+                            If error_serialno = "DUMMMMY" Then ActiveSheet.Cells(Excel_row, 6).Value = "Failed find material"   'mark it as processed for multi item case
+                        Else
+                            ActiveSheet.Cells(Excel_row, 7).Value = session.findById("wnd[0]/usr/sub:ZMTDD000:9110/txtZMZWS-MATKT_U[" & CStr(CurrentRow - 1) & ",19]").Text   ' material description
+                            ActiveSheet.Cells(Excel_row, 8).Value = error_material
+                            
+                            If session.findById("wnd[0]/usr/sub:ZMTDD000:9110/txtZMZWS-ZSERIALNR[" & CStr(CurrentRow) & ",15]").Changeable = True And serialno = "" _
+                                And ActiveSheet.Cells(Excel_row, 6).Value = "" Then
+                                ActiveSheet.Cells(Excel_row, 6).Value = "serial no required, but serial no. not available "
+                            Else  ' serialno not null
+                                If current_material = "10126959" Then ''fisher handle special CV component case
+                                    ActiveSheet.Cells(1, 3).Value = "Old dummy serial number for 10126959:"
+                                    ActiveSheet.Cells(1, 4).Value = session.findById("wnd[0]/usr/sub:ZMTDD000:9110/txtZMZWS-ZSERIALNR[" & CStr(CurrentRow) & ",15]").Text
+                                End If   'fisher handle special CV component case
+                                
+                                If session.findById("wnd[0]/usr/sub:ZMTDD000:9110/txtZMZWS-ZSERIALNR[" & CStr(CurrentRow) & ",15]").Changeable = True Then
+                                    session.findById("wnd[0]/usr/sub:ZMTDD000:9110/txtZMZWS-ZSERIALNR[" & CStr(CurrentRow) & ",15]").Text = serialno '"60181233"
+                                    ActiveSheet.Cells(Excel_row, 9).Value = "J"
+                                End If
+                                If session.findById("wnd[0]/usr/sub:ZMTDD000:9110/txtZMZWS-ZES[" & CStr(CurrentRow) & ",50]").Changeable = True Then
+                                    session.findById("wnd[0]/usr/sub:ZMTDD000:9110/txtZMZWS-ZES[" & CStr(CurrentRow) & ",50]").Text = versionno '"25"
+                                    ActiveSheet.Cells(Excel_row, 10).Value = "J"
+                                End If
+                                session.findById("wnd[0]").sendVKey 0
+                                If session.findById("wnd[0]/usr/sub:ZMTDD000:9110/txtZMZWS-ZBSTNR[" & CStr(CurrentRow) & ",86]").Changeable = True Then  ' PO
+                                    session.findById("wnd[0]/usr/sub:ZMTDD000:9110/txtZMZWS-ZBSTNR[" & CStr(CurrentRow) & ",86]").Text = ActiveSheet.Cells(Excel_row, 4)   '"4503051145"
+                                    ActiveSheet.Cells(Excel_row, 11).Value = "J"
+                                End If
+                                If session.findById("wnd[0]/usr/sub:ZMTDD000:9110/txtZMZWS-ZGEW_BEGINN[" & CStr(CurrentRow) & ",98]").Changeable = True And _
+                                    session.findById("wnd[0]/usr/sub:ZMTDD000:9110/txtZMZWS-ZGEW_BEGINN[" & CStr(CurrentRow) & ",98]").Text = "" Then  ' GR Date
+                                    session.findById("wnd[0]/usr/sub:ZMTDD000:9110/txtZMZWS-ZGEW_BEGINN[" & CStr(CurrentRow) & ",98]").Text = ActiveSheet.Cells(Excel_row, 5)   '
+                                End If
+                                StatusText = session.findById("wnd[0]/sbar").Text
+                                If session.findById("wnd[0]/sbar").MessageType = "E" Or session.findById("wnd[0]/sbar").MessageType = "A" Then   ' handle error cases
+                                    session.findById("wnd[0]/usr/sub:ZMTDD000:9110/txtZMZWS-ZSERIALNR[" & CStr(CurrentRow) & ",15]").Text = "" '"6018291"
+                                    session.findById("wnd[0]/usr/sub:ZMTDD000:9110/txtZMZWS-ZES[" & CStr(CurrentRow) & ",50]").Text = "" '"25"
+                                    session.findById("wnd[0]").sendVKey 0
+                                    'session.findById("wnd[0]/usr/sub:ZMTDD000:9110/chkZMZWS-MARK[" & CStr(CurrentRow) & ",1]").Selected = True
+                                    If (StatusText = error_missing_subitem Or StatusText = error_subitem_incomplete) _
+                                        And (ActiveSheet.Cells(Excel_row, 6).Value <> error_missing_subitem And ActiveSheet.Cells(Excel_row, 6).Value <> error_subitem_incomplete) Then    'sub component still with error
+                                        'stack_material.peek
+                                        error_row = CurrentRow
+                                        'excel_row = found.Row  'the Excel Row posistion for current header material (error material for ZMT1 anonymous entry
+                                        stack_Mode.push "Anonymous"
+                                        stack_row.push CStr(CurrentRow)
+                                        stack_pagenumber.push CStr(pagenumber)
+                                        stack_material.push error_material
+                                        stack_serialno.push error_serialno
+                                        stack_versionno.push error_versionno
+                                        error_material = current_material
+                                        error_serialno = serialno
+                                        error_versionno = versionno
+                                        ZMT1_Mode = "Anonymous"
+                                        pagenumber = 0
+                                        CurrentRow = 1
+                                        ActiveSheet.Cells(Excel_row, 6).Value = StatusText
+                                        If error_serialno <> "DUMMMMY" Then    'only save data for non dummy items
+                                            session.findById("wnd[0]/tbar[0]/btn[11]").press
+                                            session.findById("wnd[1]/tbar[0]/btn[0]").press
+                                        End If
+                                        Exit Do
+                                    End If   ' handle error case: need input subitem
+                                    ActiveSheet.Cells(Excel_row, 6).Value = StatusText
+                                ElseIf session.findById("wnd[0]/usr/sub:ZMTDD000:9110/txtZMZWS-ZBSTNR[" & CStr(CurrentRow) & ",86]").Changeable = True And _
+                                    session.findById("wnd[0]/usr/sub:ZMTDD000:9110/txtZMZWS-ZBSTNR[" & CStr(CurrentRow) & ",86]").Text = "" And error_serialno <> "DUMMMMY" Then
+                                    ActiveSheet.Cells(Excel_row, 6).Value = "PO info not provided even though PO required for this material"
+                                ElseIf (StatusText = "" Or session.findById("wnd[0]/sbar").MessageType = "S") And error_serialno <> "DUMMMMY" _
+                                    And (serialno <> "" Or versionno <> "") Then
+                                    ActiveSheet.Cells(Excel_row, 6).Value = "Processed OK"
+                                    'session.findById("wnd[0]/usr/sub:ZMTDD000:9210/chkZMZWP-ZFEHLT_KZ[" & CStr(CurrentRow) & ",1]").Selected = False
+                                End If
+                                If serialno = "DUMMMMY" Then
+                                    session.findById("wnd[0]/usr/sub:ZMTDD000:9110/txtZMZWS-ZSERIALNR[" & CStr(CurrentRow) & ",15]").Text = "" '"6018291"
+                                    session.findById("wnd[0]/usr/sub:ZMTDD000:9110/txtZMZWS-ZES[" & CStr(CurrentRow) & ",50]").Text = "" '"25"
+                                    'ActiveSheet.Cells(Excel_row, 6).Value = "Failed find material"
+                                End If
+                            End If  ' serialno not null
+                        End If
+                    End If  ' bypass auto serial number item
+                    CurrentRow = CurrentRow + 2
+                Else
+                   end_of_ZMT1 = True
+                   If CurrentRow > (max_row_on_screen - 2) Then  ' handle the case of header materials without subitems
+                        session.findById("wnd[0]/tbar[0]/btn[82]").press   ' click the next page button
+                        pagenumber = pagenumber + 1
+                        current_material = session.findById("wnd[0]/usr/sub:ZMTDD000:9110/txtZMZWS-ZMATNR_U[0,0]").Text  '1st row material on current page
+                        If previous_material <> current_material And current_material <> "" Then
+                            CurrentRow = 1
+                            previous_material = current_material
+                            end_of_ZMT1 = False
+                        End If
+                    End If
+                    If end_of_ZMT1 = True Then
+                        If error_serialno <> "DUMMMMY" Then    'only save data for non dummy items
+                            session.findById("wnd[0]/tbar[0]/btn[11]").press
+                            session.findById("wnd[1]/tbar[0]/btn[0]").press
+                            'ActiveSheet.Cells(Excel_row, 8).Value = session.findById("wnd[0]/sbar").Text
+                        End If
+                        CurrentRow = Int(stack_row.pop)
+                        ZMT1_Mode = stack_Mode.pop
+                        error_serialno = stack_serialno.pop
+                        error_versionno = stack_versionno.pop
+                        error_material = stack_material.pop
+                        pagenumber = Int(stack_pagenumber.pop)
+                        Exit Do
+                    End If
+                End If
+                counter = counter + 1
+                out_counter = out_counter + 1
+            Loop
+        End If
+        out_counter = out_counter + 1
+    Loop
+    stack_Mode = Nothing
+    stack_row = Nothing
+    stack_material = Nothing
+    stack_serialno = Nothing
+    stack_versionno = Nothing
+    stack_pagenumber = Nothing
+    zmt1_last_row = excel_last_row
+    'MsgBox "Process Completed"
+End Function
+
+
+Sub Dry_Run()
+    last_row = ActiveSheet.UsedRange.Rows.Count
+    If last_row > 4 Then
+        Rows("5:" + CStr(last_row)).Select
+        Selection.Delete Shift:=xlUp
+    End If
+    Range("A5").Select
+    ZMT1_System_Order
+    va03_download_sales_order (zmt1_last_row)
+    close_sap
+End Sub
+
+Sub ZMT1()
+    last_row = ActiveSheet.UsedRange.Rows.Count
+    If last_row > 5 Then
+        Range("F5:F" + CStr(last_row)).Select
+        Selection.ClearContents
+    End If
+    Range("A5").Select
+    ZMT1_System_Order
+    close_sap
+End Sub
+
+Function find_version(sMaterial As String, sVersion As String)
+    nRow = 0
+    nCol = 0
+    
+    Set found = Worksheets("Revision Control").Columns("A").Find(what:=sMaterial, LookIn:=xlValues, lookat:=xlWhole, SearchOrder:=xlByRows, SearchDirection:=xlNext, MatchCase:=False, SearchFormat:=False)
+    If Not found Is Nothing Then
+       nRow = found.Row
+       Set found = Worksheets("Revision Control").Rows(1).Find(what:=sVersion, LookIn:=xlValues, lookat:=xlWhole, SearchOrder:=xlByRows, SearchDirection:=xlNext, MatchCase:=False, SearchFormat:=False)
+       If Not found Is Nothing Then
+          nCol = found.Column
+       End If
+    End If
+
+    If nRow = 0 Or nCol = 0 Then
+      find_version = False
+    Else
+      If UCase(Worksheets("Revision Control").Cells(nRow, nCol)) = "V" Then
+        find_version = True
+      Else
+        find_version = False
+      End If
+    End If
+End Function
+
+Sub va03_download_sales_order(last_zmt1_row As Integer)
+    detect_column_finished = False
+    session.findById("wnd[0]").maximize
+    session.findById("wnd[0]/tbar[0]/okcd").Text = "/nva03"
+    session.findById("wnd[0]").sendVKey 0
+    session.findById("wnd[0]/usr/ctxtVBAK-VBELN").Text = Cells(1, 2).Value 'sales order "8403593"
+    session.findById("wnd[0]").sendVKey 0
+    session.findById("wnd[0]/usr/tabsTAXI_TABSTRIP_OVERVIEW/tabpT\02").Select
+    Set items = session.findById("wnd[0]/usr").FindByNameEx("SAPMV45ATCTRL_U_ERF_AUFTRAG", 80)
+    total_items = items.verticalScrollbar.Maximum + 1 '
+    If total_items = 0 Then
+       total_items = 1
+    End If
+    PageSize = items.verticalScrollbar.PageSize
+    items.verticalScrollbar.Position = 0
+    Set cur_row = items.Rows(0)
+    col_count = 0
+    'Table = "/app/con[0]/ses[0]/wnd[0]/usr/tabsTAXI_TABSTRIP_OVERVIEW/tabpT\02/ssubSUBSCREEN_BODY:SAPMV45A:4401/subSUBSCREEN_TC:SAPMV45A:4900/tblSAPMV45ATCTRL_U_ERF_AUFTRAG/"
+    For ii = 0 To cur_row.Count - 1     'get the col index due to different user settings
+        col_count = col_count + 1
+        If cur_row(ii + 0).Name = "VBAP-POSNR" Then '+0 to force convert to expected Integer type, otherwise there will be error:Bad index type for collection access
+            col_item = ii + 0
+        ElseIf cur_row(ii + 0).Name = "RV45A-MABNR" Then
+            col_mat = ii + 0
+        ElseIf cur_row(ii + 0).Name = "RV45A-KWMENG" Then
+            col_qty = ii + 0
+        ElseIf cur_row(ii + 0).Name = "VBAP-VRKME" Then
+            col_uom = ii + 0
+        ElseIf cur_row(ii + 0).Name = "VBAP-ARKTX" Then
+            col_desc = ii + 0
+        ElseIf cur_row(ii + 0).Name = "VBAP-PSTYV" Then
+            col_item_category = ii + 0
+        ElseIf cur_row(ii + 0).Name = "VBAP-ABGRU" Then
+            ID = cur_row(ii + 0).ID
+            'ID = Replace(ID, Table & "cmbVBAP-ABGRU[", "")  'retrieve the column from ID field, other than the sequence.
+            ID = Split(ID, ",")(0)  'the first part before ,
+            col_rej_reason = Int(Right(ID, Len(ID) - InStr(ID, "ABGRU[") - 5))
+         ElseIf cur_row(ii + 0).Name = "VBAP-CHARG" Then
+            col_batch = ii + 0
+        Else
+            col_count = col_count - 1
+        End If
+        If col_count > 7 Then
+            Exit For
+        End If
+    Next ii
+        
+    seq = last_zmt1_row + 1
+    For j = 1 To total_items
+        pageindex = j Mod PageSize
+        If pageindex = 1 Then
+            If j > 1 Then
+                session.findById("wnd[0]/tbar[0]/btn[82]").press   ' click the next page button
+                Set items = session.findById("wnd[0]/usr").FindByNameEx("SAPMV45ATCTRL_U_ERF_AUFTRAG", 80)
+            End If
+            CurrentRow = 0
+        Else
+            CurrentRow = CurrentRow + 1
+        End If
+        'Set items = session.findById("wnd[0]/usr").FindByNameEx("SAPMV45ATCTRL_U_ERF_AUFTRAG", 80)
+        Set cur_row = items.Rows(CurrentRow)
+        item_category = items.GetCell(CurrentRow, col_item_category).Text
+        On Error Resume Next
+            rej_reason = items.GetCell(CurrentRow, col_rej_reason).Text
+        If Err.Number <> 0 Then
+            rej_reason = ""
+        End If
+        On Error Resume Next
+            batch = items.GetCell(CurrentRow, col_batch).Text
+        If Err.Number <> 0 Then
+            batch = ""
+        End If
+        material = items.GetCell(CurrentRow, col_mat).Text
+        qty = Int(items.GetCell(CurrentRow, col_qty).Text)
+        'sales block materials are dummy material for pricing only, not packing relevant, so it need to be excluded, also rejected item to be excluded
+        If (item_category <> "ZKO" And item_category <> "ZVO" And item_category <> "ZAW") And rej_reason = "" Then
+            is_zmt1_material = False
+            If material = "14455597" Then   'additional user manual ordered, but it is sales block material which is not subject to packing / VL02N
+                material = "10992712"
+            Else
+                For i = 6 To last_zmt1_row
+                    If Cells(i, 1).Text = material Then
+                        is_zmt1_material = True
+                        zmt1_row = i
+                        Exit For
+                    End If
+                Next i
+            End If
+            If is_zmt1_material = False Then
+                For k = 1 To qty
+                    'Cells(seq, 1) = "'" + cur_row(col_item + 0).Text
+                    Cells(seq, 1) = material
+                    Cells(seq, 4) = 1
+                    Cells(seq, 6) = "From sales order"
+                    Cells(seq, 13) = ""
+                    If material = "10992712" Then
+                        Cells(seq, 6) = "Extra user manual item"
+                        Cells(seq, 13) = "do not update VL02N"
+                    End If
+                    Cells(seq, 7) = cur_row(col_desc + 0).Text
+                    Cells(seq, 12) = batch
+                    seq = seq + 1
+                Next k
+            Else
+                Cells(zmt1_row, 12) = batch
+                Cells(zmt1_row, 4) = 1 'set default qty = 1
+                Cells(zmt1_row, 6) = "From zmt1 & sales order"
+                Cells(zmt1_row, 13) = ""
+            End If
+        End If
+     Next j
+     'component of ZMT1 material not in sales order which is to be excluded from vl02n for packing
+     For k = 6 To last_zmt1_row
+        If Cells(k, 6) <> "From zmt1 & sales order" And Cells(k, 6) <> "From sales order" And Cells(k, 6) <> "Extra user manual item" Then
+            Cells(k, 6) = "Sub item from ZMT1, not in Sales Order"
+            Cells(k, 13) = "do not update VL02N"
+            Cells(k, 4) = 1 'set default qty = 1
+        End If
+     Next k
+     ' extra materail is manually added into production order, not in sales order, but subject to packing material check
+     Dim ws As Worksheet
+     Set ws = Sheets("extra materials")
+     For i = 2 To ws.UsedRange.Rows.Count
+        If ws.Cells(i, 1) = "" Then
+            Exit For
+        End If
+        Cells(seq, 1) = ws.Cells(i, 1)
+        Cells(seq, 4) = 1
+        Cells(seq, 7) = ws.Cells(i, 2)
+        Cells(seq, 6) = "Manually added"
+        Cells(seq, 13) = "do not update VL02N"
+        seq = seq + 1
+     Next i
+End Sub
+
+Sub vl02n_update_size_weight()
+    Dim ws As Worksheet
+    Set ws = Sheets("box-size-weight")
+    excel_last_row = ws.UsedRange.Rows.Count
+    
+    session.findById("wnd[0]/usr/tabsTS_HU_VERP/tabpUE6POS").Select  'select 1st pack material tab sheet
+    On Error Resume Next
+        session.findById ("wnd[0]/usr/tabsTS_HU_VERP/tabpUE6POS/ssubTAB:SAPLV51G:6010/tblSAPLV51GTC_HU_001/ctxtV51VE-EXIDV[0,0]")
+    If Err.Number <> 0 Then
+        MsgBox "no packing items to be processed, please kindly maintain the packing items first!"
+        End
+    End If
+    session.findById("wnd[0]/usr/tabsTS_HU_VERP/tabpUE6POS/ssubTAB:SAPLV51G:6010/tblSAPLV51GTC_HU_001/ctxtV51VE-EXIDV[0,0]").SetFocus  'the 1st item
+    session.findById("wnd[0]").sendVKey 2   'double click
+    session.findById("wnd[0]/usr/tabsTS_HU_DET/tabpDETVEKP").Select  'switch to the 1st tab page for nw/gw/size
+    Do While counter < 50   'maxium 50 to make sure no endless loop
+        counter = counter + 1
+        Colli_no = session.findById("wnd[0]/usr/ctxtVEKP-EXIDV").Text
+        Set found = ws.Columns("A").Find(what:=Colli_no, LookIn:=xlValues, lookat:=xlWhole)
+        If found Is Nothing Then   ' COlli Number/BoxID not available in Excel
+            ws.Cells(excel_last_row + 1, 1).Value = Colli_no
+            ws.Cells(excel_last_row + 1, 20).Value = "Failed find Colli number in Excel file"
+        Else
+            GW = ws.Cells(found.Row, 3)
+            NW = ws.Cells(found.Row, 4)
+            TARE = GW - NW 'Gross weight will be calculated
+            l = ws.Cells(found.Row, 5)
+            W = ws.Cells(found.Row, 6)
+            H = ws.Cells(found.Row, 7)
+            session.findById("wnd[0]/usr/tabsTS_HU_DET/tabpDETVEKP/ssubTAB:SAPLV51G:6110/txtVEKPVB-TARAG").Text = TARE
+            session.findById("wnd[0]/usr/tabsTS_HU_DET/tabpDETVEKP/ssubTAB:SAPLV51G:6110/txtVEKPVB-NTGEW").Text = NW
+            session.findById("wnd[0]/usr/tabsTS_HU_DET/tabpDETVEKP/ssubTAB:SAPLV51G:6110/txtVEKPVB-LAENG").Text = l
+            session.findById("wnd[0]/usr/tabsTS_HU_DET/tabpDETVEKP/ssubTAB:SAPLV51G:6110/txtVEKPVB-BREIT").Text = W
+            session.findById("wnd[0]/usr/tabsTS_HU_DET/tabpDETVEKP/ssubTAB:SAPLV51G:6110/txtVEKPVB-HOEHE").Text = H
+            session.findById("wnd[0]").sendVKey 0
+            ws.Cells(found.Row, 8) = "Processed OK"
+            If session.findById("wnd[0]/sbar").MessageType = "E" Then
+                ws.Cells(found.Row, 8) = session.findById("wnd[0]/sbar").Text
+                session.findById("wnd[0]/usr/tabsTS_HU_DET/tabpDETVEKP/ssubTAB:SAPLV51G:6110/txtVEKPVB-NTGEW").Text = ""
+                session.findById("wnd[0]/usr/tabsTS_HU_DET/tabpDETVEKP/ssubTAB:SAPLV51G:6110/txtVEKPVB-BRGEW").Text = ""
+                session.findById("wnd[0]/usr/tabsTS_HU_DET/tabpDETVEKP/ssubTAB:SAPLV51G:6110/txtVEKPVB-LAENG").Text = ""
+                session.findById("wnd[0]/usr/tabsTS_HU_DET/tabpDETVEKP/ssubTAB:SAPLV51G:6110/txtVEKPVB-BREIT").Text = ""
+                session.findById("wnd[0]/usr/tabsTS_HU_DET/tabpDETVEKP/ssubTAB:SAPLV51G:6110/txtVEKPVB-HOEHE").Text = ""
+                End
+            End If
+        End If
+        session.findById("wnd[0]/tbar[1]/btn[5]").press  'next item
+        If session.findById("wnd[0]/sbar").Text = "There are no other handling units" Then 'last item reached
+            Exit Do
+        End If
+    Loop
+    session.findById("wnd[0]/tbar[0]/btn[11]").press
+    ws.Cells(excel_last_row + 1, 8) = session.findById("wnd[0]/sbar").Text
+End Sub
+
+Sub VL02N()
+    'VL02N_preprocess
+    'check box info completeness
+    no_box_rows = ""
+    For i = 6 To ActiveSheet.UsedRange.Rows.Count
+        If Cells(i, 5) = "" And Cells(i, 13) <> "do not update VL02N" Then
+            no_box_rows = no_box_rows + " row:" + Str(i) + " " + Cells(i, 1).Text + Chr(13)
+        End If
+    Next i
+    If no_box_rows <> "" Then
+        MsgBox "Please assign box ID for these materials:" + Chr(13) + no_box_rows
+        End
+    End If
+    dn = Cells(3, 2) '"104579240" '
+    If dn = "" Then
+        MsgBox "please provide DN number!"
+        dn = Application.InputBox("Enter Delivery Note Number", "Delivery Note", "", , , , , 1)
+    End If
+    If dn = "" Or dn = False Then
+        Exit Sub
+    End If
+    open_sap
+    session.findById("wnd[0]").maximize
+    session.findById("wnd[0]/tbar[0]/okcd").Text = "/nvl02n"
+    session.findById("wnd[0]").sendVKey 0
+    session.findById("wnd[0]/usr/ctxtLIKP-VBELN").Text = dn '"103419673"
+    session.findById("wnd[0]/usr/ctxtLIKP-VBELN").caretPosition = 9
+    session.findById("wnd[0]").sendVKey 0
+    session.findById("wnd[0]/tbar[1]/btn[18]").press   'click the pack button
+    MessageType = session.findById("wnd[0]/sbar").MessageType
+    If MessageType = "E" Then
+        MsgBox session.findById("wnd[0]/sbar").Text
+        End
+    ElseIf mesagetype = "W" Then
+        session.findById("wnd[0]").sendVKey 0
+    End If
+    On Error Resume Next
+        session.findById ("wnd[1]/tbar[0]/btn[0]")
+    If Err.Number = 0 Then
+        session.findById("wnd[1]/tbar[0]/btn[0]").press
+    End If
+    session.findById("wnd[0]/usr/tabsTS_HU_VERP/tabpUE6VDIR").Select  'single entry tab sheet
+    Dim ws As Worksheet
+    Set ws = Sheets("box-size-weight")
+    last_row = ws.UsedRange.Rows.Count
+    For i = 6 To ActiveSheet.UsedRange.Rows.Count
+        If Cells(i, 1) <> "" And Cells(i, 13) <> "do not update VL02N" Then   '  bypass the empty material and not applicable row
+            For m = 2 To last_row:  'get content of box ID from auto packing
+                If ws.Cells(m, 1) = Cells(i, 5) Then
+                    Content = ws.Cells(m, 2)
+                    Exit For
+                End If
+            Next m
+            session.findById("wnd[0]/usr/tabsTS_HU_VERP/tabpUE6VDIR/ssubTAB:SAPLV51G:6050/ctxtVEKP-EXIDV").Text = Cells(i, 5) 'box id
+            session.findById("wnd[0]/usr/tabsTS_HU_VERP/tabpUE6VDIR/ssubTAB:SAPLV51G:6050/txtVEKP-INHALT").Text = Content    'content, box mark/label
+            session.findById("wnd[0]/usr/tabsTS_HU_VERP/tabpUE6VDIR/ssubTAB:SAPLV51G:6050/ctxtVEKP-VHILM").Text = "10281249" 'package material
+            session.findById("wnd[0]/usr/tabsTS_HU_VERP/tabpUE6VDIR/ssubTAB:SAPLV51G:6050/ctxtHUMV4-MATNR").Text = Cells(i, 1) 'material number
+            batch = Cells(i, 12).Text
+            If batch <> "" Then
+                session.findById("wnd[0]/usr/tabsTS_HU_VERP/tabpUE6VDIR/ssubTAB:SAPLV51G:6050/ctxtHUMV4-CHARG").Text = batch 'batch
+            End If
+            qty = Cells(i, 4)
+            If qty = "" Then qty = 1
+            session.findById("wnd[0]/usr/tabsTS_HU_VERP/tabpUE6VDIR/ssubTAB:SAPLV51G:6050/txtHUMV4-QUANTITY").Text = qty    'quantity
+            session.findById("wnd[0]").sendVKey 0
+            Cells(i, 6) = session.findById("wnd[0]/sbar").Text
+            If session.findById("wnd[0]/sbar").MessageType = "E" Then 'clear the error to make enter next entry OK
+                session.findById("wnd[0]/usr/tabsTS_HU_VERP/tabpUE6VDIR/ssubTAB:SAPLV51G:6050/ctxtHUMV4-MATNR").Text = "" 'material number
+                session.findById("wnd[0]/usr/tabsTS_HU_VERP/tabpUE6VDIR/ssubTAB:SAPLV51G:6050/ctxtHUMV4-CHARG").Text = "" 'batch
+                session.findById("wnd[0]").sendVKey 0
+            End If
+        End If
+    Next i
+    vl02n_update_size_weight
+    Cells(1, 6) = "Packed OK"
+    close_sap
+End Sub
+
+Sub VL02N_preprocess()
+    Dim ws As Worksheet
+    Set ws = Sheets("auto packing")
+    last_row = ws.UsedRange.Rows.Count
+    last_row_active = ActiveSheet.UsedRange.Rows.Count
+    rowno = last_row_active
+    'clear the previous process status
+    For i = 2 To last_row
+        ws.Cells(i, 5) = ""
+    Next i
+'auto packing: case1: split system material 10848557 into fixed number of boxes by percentage
+'              case2: assign box for disc material from the fixed material's box
+    For i = 6 To last_row_active
+        material = Cells(i, 1).Text
+        If Cells(i, 5) = "" Then
+            For j = 2 To last_row
+                If ws.Cells(j, 1).Text = material And ws.Cells(j, 5) = "" Then
+                    If ws.Cells(j, 3) = "" And ws.Cells(j, 4) <> "" Then 'ref material box number
+                        box_id = ""
+                        found_ref_mat = False
+                        For m = 6 To last_row_active
+                            If Cells(m, 1) = ws.Cells(j, 4) Then
+                                box_id = Cells(m, 5)
+                                found_ref_mat = True
+                                Exit For
+                            End If
+                        Next m
+                        Cells(i, 6) = "license/key material, no need scan and check;"
+                        If found_ref_mat Then
+                            Cells(i, 5) = box_id
+                            Cells(i, 4) = 1
+                            If box_id = "" Then
+                                Cells(i, 6) = Cells(i, 6) + Chr(13) + "No box ID for ref material:" + ws.Cells(j, 4).Text + " yet"
+                            End If
+                        Else
+                            Cells(i, 6) = Cells(i, 6) + Chr(13) + "Ref material:" + ws.Cells(j, 4).Text + " not in the sales order"
+                        End If
+                    Else:
+                        qty = 0
+                        mat_count = 0
+                        For k = 2 To last_row:
+                            If ws.Cells(k, 1) = Cells(i, 1) And ws.Cells(k, 5) = "" Then
+                                qty = qty + ws.Cells(k, 2)
+                                mat_count = mat_count + 1
+                                If qty <= 1 Then
+                                    If mat_count = 1 Then
+                                        Cells(i, 4) = ws.Cells(k, 2)
+                                        Cells(i, 5) = ws.Cells(k, 3)
+                                    Else
+                                        Cells(rowno + 1, 1) = ws.Cells(k, 1)
+                                        Cells(rowno + 1, 4) = ws.Cells(k, 2)
+                                        Cells(rowno + 1, 5) = ws.Cells(k, 3)
+                                        Cells(rowno + 1, 12) = Cells(i, 12)  'copy the batch number
+                                        rowno = rowno + 1
+                                    End If
+                                    ws.Cells(k, 5) = "processed"
+                                    
+                                    If qty - 1 = 0 Then
+                                        Exit For
+                                    End If
+                                End If
+                            End If
+                        Next k
+                    End If
+                    ws.Cells(j, 5) = "processed"
+                End If
+            Next j
+        Else  'not overwrite existing box id, but auto fill default quantity 1
+            If Cells(i, 4) = "" Then
+                Cells(i, 4) = 1  'default qty as 1
+            End If
+        End If
+    Next i
+End Sub
