@@ -65,6 +65,9 @@ Sub VA02_Change_Schedule_lines()
                 err_msg = "The date format does not match SAP format or old date not exist in current schedule line lists"
                 Cells(i, 8) = err_msg
             Else
+                If new_date <> "" Then
+                    session.findById("wnd[0]/usr/tabsTAXI_TABSTRIP_ITEM/tabpT\07/ssubSUBSCREEN_BODY:SAPMV45A:4500/tblSAPMV45ATCTRL_PEIN/ctxtRV45A-ETDAT[1,0]").Text = new_date '"171118"
+                End If
                 session.findById("wnd[0]/usr/tabsTAXI_TABSTRIP_ITEM/tabpT\07/ssubSUBSCREEN_BODY:SAPMV45A:4500/tblSAPMV45ATCTRL_PEIN/txtVBEP-WMENG[2,0]").Text = new_qty '"10.000"
                 session.findById("wnd[0]").sendVKey 0
                 msg = session.findById("wnd[0]/sbar").Text
@@ -113,3 +116,4 @@ next_sales_item:
         MsgBox "Process Completed"
     End If
 End Sub
+
