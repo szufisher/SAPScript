@@ -45,6 +45,7 @@ Sub Info_Record_Upload()
             session.findById("wnd[0]").resizeWorkingPane 233, 30, False
             session.findById("wnd[0]/tbar[0]/okcd").Text = "/nme11"
             session.findById("wnd[0]").sendVKey 0
+            'session.findById("wnd[0]/usr/radRM06I-NORMB").Select
             session.findById("wnd[0]/usr/ctxtEINA-LIFNR").Text = Cells(i, 1) '"9301073"
             session.findById("wnd[0]/usr/ctxtEINA-MATNR").Text = Cells(i, 2) '"03430337"
             session.findById("wnd[0]/usr/ctxtEINE-EKORG").Text = Cells(i, 4)  '""
@@ -68,6 +69,7 @@ Sub Info_Record_Upload()
                 If InStr(result, "already exists") > 0 Then
                     session.findById("wnd[0]/tbar[0]/okcd").Text = "/nme12"
                     session.findById("wnd[0]").sendVKey 0
+                    'session.findById("wnd[0]/usr/radRM06I-NORMB").Select
                     session.findById("wnd[0]/usr/ctxtEINA-LIFNR").Text = Cells(i, 1) '"9301073"
                     session.findById("wnd[0]/usr/ctxtEINA-MATNR").Text = Cells(i, 2) '"03430337"
                     session.findById("wnd[0]/usr/ctxtEINE-EKORG").Text = Cells(i, 4)  '""
@@ -119,7 +121,7 @@ Sub Info_Record_Upload()
                     End If
                 Next j
                 On Error Resume Next
-                    session.findById ("wnd[1]/tbar[0]/btn[7]")   'add new validity period, to keep the history record
+                    session.findById ("wnd[1]/tbar[0]/btn[7]")   'add new validity period
                 If Err.Number = 0 Then
                     session.findById("wnd[1]/tbar[0]/btn[7]").press
                 End If
@@ -131,7 +133,7 @@ Sub Info_Record_Upload()
                         session.findById("wnd[0]/usr/ctxtRV13A-DATBI").Text = Cells(i, 17) '"12/30/9999"
                     End If
                 Else
-                    session.findById("wnd[1]/tbar[0]/btn[7]").press
+                    'session.findById("wnd[1]/tbar[0]/btn[7]").press
                     If Cells(i, 16) <> "" Then
                         session.findById("wnd[0]/usr/ctxtRV13A-DATAB").Text = Cells(i, 16) '"050418"
                     End If
@@ -150,12 +152,6 @@ Sub Info_Record_Upload()
                     session.findById("wnd[0]").sendVKey 0
                 End If
                 session.findById("wnd[0]/tbar[0]/btn[11]").press
-                On Error Resume Next  'for case that overlap validity period, confirm to auto delete overlap period
-                    session.findById ("wnd[1]")   '
-                If Err.Number = 0 Then
-                    session.findById("wnd[1]").press
-                End If
-                
                 If session.findById("wnd[0]/sbar").messagetype = "W" Then
                     session.findById("wnd[0]").sendVKey 0
                 End If
