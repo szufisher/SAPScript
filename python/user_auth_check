@@ -1,19 +1,66 @@
-#refactor user permission system
-#simple concept: assigned authorizations vs requested authorizations(target document)
-#design modelling:1.define auth object for doctypes, module->doctype->auth object->auth field
-#design modelling,2.define role and authorization, assign multi roles to user, user->role->authorization: auth field values
-#authority checking:document.get_doc(), document.insert(), document.save(), model.delete_doc() for form view
-#matching condition for frappe.get_list :frappe.db.query.execute matching condition for list view
-#matching condition for set_query link field
-#matching condition for global search
-#matching condition for report view
-#rule: user authorized for assigned authorizations only, for globally accessible doctypes, define as ignore permission at meta/doctype level
-#rule, allow multi values per auth field, distinct values, value range(from, to), wild card(* and ?), variable from user master, e.g $user.name, user.department
-#rule, authorizaiton for same auth objects can be set multi times per role, cross role to allow define separate auth level(create / change/ display)
-#for different set of records
-#rule: if mutli auth obj defined for doctype, authorization for all auth objects to be fulfilled
-#rule: for ad hoc auth per doc and user combination, document sharing mechnism to be used
-#
+"""refactor user permission system
+core concept:requested authorizations(the doc) against assigned authorizations by multi auth objs
+How it works
+1. define authorization objects, i.e choose authorization fields
+	1.1 add the special action field which is mapped to the user operation on the doc, such as New,change, delete, cancel etc
+	1.2 optionally add other to be auth checked fields, multi fields can be assigned per auth object
+	1.3 multi fields can be combined using | (OR) operator, 
+		e.g owner|approver allows the user to check leave applications which he is owner or approver
+	1.4 assign authorizaiton objects to doctype
+		1.4.1 multi auth objects can be assigned
+		1.4.2 whether mandatory check can be defined per auth obj and doctype
+	1.5 optionally auth objects can be assigned to doctype field, only one auth object can be assigned to one doctype field	
+	
+2. define roles and main authorizations
+	2.1 select auth object, select auth field, assign authorized values to the authorization field
+	2.2 authorized value rules
+		2.2.1 wild card *, which means full authorization on this field
+		2.2.2 single fixed value
+		2.2.3 single partial fixed value with wildcard
+		2.2.4 single variable value link to user master field, using $user. as prefix
+		2.2.5 single fixed value for field has descendants, which means it includes all its descendants
+		2.2.6 fixed value with range, value from and value to
+	2.3 authorization rule:  same key assigned to records of authorization fields of the same auth object
+		2.3.1 one auth object can be added to the same role multi times
+		 
+3. assign roles to user
+	3.1 multi roles can be assigned to same user
+
+4. System do authorization check at following point
+	4.1 bypass the auth check for globally accessed doctype, the checking is not necessary
+	4.2 auth check when user trigger the operation(action) on the target document
+		4.2.1 implicit check the relevant doc field by the assigned authorization object
+	4.3 when user retrieves multi documents for listing view, report view, link field search, trigger the implicit read action,
+		system translate user's authorizations into matching/filering condition,add it to the SQL where clause in db_query
+		4.3.1 implicit apply the matching condition of the linked doc type 
+	
+use cases: 
+1. user can display/edit leave applications which he/her is the owner or approver
+Solution: define owner|approver as auth field, maintain $user.name as authorization value to the role
+use_case1={'auth_objs_fields':{'lap':
+			  [['lap_owner','act'                 ],
+			  ['lap_owner','owner|leave_approver']]},
+		'authorizations':[
+			  [16,'lap_owner','act',				 '*',         ''],
+			  [16,'lap_owner','owner|leave_approver','$user.name','']],
+		'docs':[
+			  {'doctype':'lap', 'act':'03','user':'admin','owner':'admin','leave_approver':'fisher'},
+			  {'doctype':'lap', 'act':'03','user':'admin','owner':'fisher','leave_approver':'admin'}]	
+		  }
+		  
+2. sales user can display/edit only customers which he is the assigned sales person
+Solution: define auth obj for customer and add sales person as auth field, maintain $user.name as authorization value to the role
+
+3. sales user can display/change only sales transactions for customer which he is the assigned sales person
+Solution: define auth obj for customer and add sales person as auth field, maintain $user.name as authorization value to the role
+also assign the same auth object for customer to the customer field in relevant sales transaciton doctypes
+
+4. stock user can create/change/display stock entries of Move-In type, can display stock entries of all types
+solution: define type as auth field, create authorizations for the same auth obj, 
+for 1st authorization, assign create/change to action field, Move-In to type field
+for 2nd authorization, assign display to action field, * to type field   
+"""
+			  
 auth_objs_fields={'PO':[['po_org', 'act'],
 						['po_org', 'org'],
 						['po_type', 'act'],
@@ -26,11 +73,14 @@ auth_objs_fields={'PO':[['po_org', 'act'],
 				'SO':  [['so_org','act'],
 						['so_org','org'],
 						['so_type','act'],
-						['so_type','type']]}
+						['so_type','type']],
+				'lap':  [['lap_owner','act'                 ],
+						['lap_owner','owner|leave_approver']]												
+				}
 #auth_fields ={'po_org':['act','org'],'po_type':['act','type'],
 #'sle_org':['act','plant','location'],'sle_type':['act','type'],'so_org':['act','org'],'so_type':['act','type'],}
 #auth check cache, by auth key generated by doc's auth field values 
-mylocals={'admin':{'PO': {},'SLE': {}}}
+mylocals={'admin':{'PO': {},'SLE': {},'lap': {}}}
 #auth: authorization,auth obj, auth field,value from, value to	  
 authorizations=[[1,'po_org','act','01',''],
 			  [1,'po_org','act','02','04'],
@@ -64,7 +114,9 @@ authorizations=[[1,'po_org','act','01',''],
 			  [14,'sle_type','act','3',''],
 			  [14,'sle_type','type','*',''],
 			  [15,'so_type','act','*',''],
-			  [15,'so_type','type','*','']
+			  [15,'so_type','type','*',''],
+			  [16,'lap_owner','act','*',''],
+			  [16,'lap_owner','owner|leave_approver','$user.name','']
 			  ]
 	  	  
 docs=[{'doctype':'PO','type':'nb','act':'01','org':'3000'},
@@ -76,10 +128,11 @@ docs=[{'doctype':'PO','type':'nb','act':'01','org':'3000'},
 	  {'doctype':'PO','type':'nb','act':'07','org':'8500'},
 	  {'doctype':'PO','type':'nb','act':'B','org':'9100'},
 	  {'doctype':'PO','type':'nb','act':'A','org':'9000'},
-	  {'doctype':'SLE','type':'nb','act':'3','plant':'13000','location':'r201'}]
+	  {'doctype':'SLE','type':'nb','act':'3','plant':'13000','location':'r201'},
+	  {'doctype':'lap', 'act':'03', 'owner':'admin','leave_approver':'fisher'},
+	  {'doctype':'lap', 'act':'03', 'owner':'fisher','leave_approver':'admin'}]
 
-# Python program to match wild card characters 
-  
+# Python program to match wild card characters   
 # The main function that checks if two given strings match. 
 # The first string may contain wildcard characters 
 def match(first, second): 
@@ -120,7 +173,11 @@ def get_auth_key(act, doc='', doctype=''):
 		doc_for_auth ={}		
 		for (auth_obj,auth_field) in auth_objs_fields[doc['doctype']]:					
 			if auth_field !='act' and auth_field not in doc_for_auth:
-				doc_for_auth[auth_field] = doc.get(auth_field)
+				if '|' in auth_field:
+					field_value = ':'.join([doc.get(field) for field in auth_field.split('|')])
+				else:
+					field_value = doc.get(auth_field)
+				doc_for_auth[auth_field] = field_value
 		auth_key = '%s:%s' %(':'.join(doc_for_auth.values()), act)
 		
 		return auth_key
@@ -129,6 +186,8 @@ def get_auth_key(act, doc='', doctype=''):
 def get_authorization(doctype, act='03', user=None, usage = 'doc', auth_obj=None):
 	"""get authorization records list from cache
 		0. auth records to be ordered by auth obj, auth ID and auth field
+		from operator import itemgetter
+		sorted_list = sorted(list_to_sort, key=itemgetter(2,0,1))
 		1. usage
 			1.1 doctype, for auth field act only, retruns only act records
 			1.2 doc: return records exclude act records, duplicate non act records removed, wildcard replace other records
@@ -201,21 +260,28 @@ def auth_check(doc, act, user,  doctype='', trace=0):
 
 
 def check_field(doctype, field, field_value, value_from, value_to=None, user=None):
-	""" checking doc field against value from/value assigned to user via role authorization detail
+	""" checking doc field against user's assigned authorizations(via role): value from/value to
 		1. wildcard * matches all 
 		2. wildcard as part of the text, works as like % in SQL
 		3. variable field from user master, $user.company, will substitue with current user master field
 		4. value from and value to,  works as between(inclusive) in SQL
 		5. simple value, works as equal(=) in SQL
+		6. for field support hierarchy structure, the descedants included
+		7. mutli fields separated by | is treated as OR 
 	"""
+	user = {'name':'admin'}
 	if value_from == '*':
 		return True
 	if not value_to:
 		if any(c in value_from for c in ['*','?']):
 			return match(value_from, field_value)
 		else: # to do handle get descendant
-			#if '$user.' in value_from:				
+			if '$user.' in value_from:				
 			#	value_from = frappe.get_doc('User', user).get(value_from.split('.')[1])
+				value_from = user.get(value_from.split('.',1)[1])
+			if '|' in field:	# owner|approver multi fields combined by OR logic
+				return value_from in field_value
+				
 			if field_value == value_from:
 				return True
 			else:
@@ -223,7 +289,8 @@ def check_field(doctype, field, field_value, value_from, value_to=None, user=Non
 				if descendants == field_value:
 					return False
 				else:
-					return field_value in descendants			
+					return field_value in descendants
+					
 	else:
 		return value_from <= field_value <= value_to		
 	
@@ -231,7 +298,7 @@ def check_field(doctype, field, field_value, value_from, value_to=None, user=Non
 def _auth_check(doc, act, user, doctype=None, trace=0):
 	"""1.doctype level check:only act field is relevant
 	   2.doc level check:
-			2.1 at least one valid auth records exist, to support adding more auth objs later for new user only,
+			2.1 at least one valid auth records exists, to support adding more auth objs later for new user only,
 			 no impact to existing users without authorizations for new auth obj 
 			2.2 for doc field with empty value, check is OK
 			2.3 Logic of combining all relevant authorizations per each authorizationID
@@ -265,7 +332,10 @@ def _auth_check(doc, act, user, doctype=None, trace=0):
 				obj_auths = [auth for auth in auths if auth[1] == auth_obj]	
 				if not obj_auths:
 					continue
-				check_value =  doc.get(auth_field) # act if auth_field=='act' else
+				if '|' in auth_field:
+					check_value = [doc.get(field) for field in auth_field.split('|')]
+				else:
+					check_value =  doc.get(auth_field) # act if auth_field=='act' else
 				if not check_value:  # bypass checking empty to be checked doc field
 					auth = [i[0] for i in obj_auths if i[2]== auth_field]
 				else:				
@@ -279,23 +349,28 @@ def _auth_check(doc, act, user, doctype=None, trace=0):
 			return len(result)>0
 
 def get_match_conditions(doctype, act='read', user=None):
-	""" append auth relevant where condition to list display via get_list/get_all or report query
+	""" apply auth relevant restriction to db_query's where condition, which is called by via get_list/get_all or report query
 		for logic details, please check the _auth_check documentation
 	"""
 	def build_condition(auth):
-		"""generate SQL where condition per auth record for single field"""
+		"""generate SQL where condition per auth record for single field"""		
 		if auth[3] and auth[4]:
 			condition = "%s between '%s' and '%s'" %(auth[2], auth[3], auth[4])
 		elif '*' in auth[3]:
 			condition = "%s like '%s'" %(auth[2], auth[3].replace('*', '%'))
 		else:
-			#if '$user.' in auth[3]:				
+			if '$user.' in auth[3]:				
 			#	auth[3] = frappe.get_doc('User', user).get(auth[3].split('.')[1])
+				auth[3] = {'name':'admin'}.get(auth[3].split('.',1)[1])
 			descendants = get_descendants(doctype, auth[2], auth[3])
 			if descendants == auth[3]:
 				condition = "%s = '%s'" %(auth[2], auth[3])
 			else:
 				condition = "%s in (%s)" %(auth[2], ','.join(["'%s'" %(i) for i in descendants]))
+		# a|b between "c" and "d" => a between "c" and "d" or b between "c" and "d"		
+		if '|' in auth[2]:
+			condition_value = condition.split(' ',1)[1]
+			condition = ' or '.join(["%s %s" %(i,condition_value) for i in auth[2].split('|')])
 		return condition
 		
 	if not 'match_condition' in mylocals[user].get(doctype).keys():
@@ -338,13 +413,24 @@ def get_match_conditions(doctype, act='read', user=None):
 		
 	return mylocals[user].get(doctype).get('match_condition')
 		
-def test():	
-	for doc in docs:
-		print(auth_check(doc, doc['act'],'admin'))
-	auth_check('', '03', 'admin','PO')
-	auth_check('', '53', 'admin','PO')
-	auth_check('', '53', 'admin','SO')
-	
-test()
+def test(use_case):	
+	match_printed = False
+	auth_objs_fields = use_case.get('auth_objs_fields')
+	authorizations = use_case.get('authorizations')
+	for doc in use_case.get('docs'):
+		if not match_printed:
+			print('%s:%s' %('authorizations',authorizations))
+			print('%s:%s' %('match record  ',get_match_conditions(doc['doctype'],doc['act'],doc['user'])))			
+			print('------')
+			match_printed = True
+			
+		check_result = auth_check(doc, doc['act'],doc['user'])
+		print('%s:%s' %('doc checked   ',doc))
+		print('%s:%s' %('authorizations',authorizations))
+		print('%s:%s' %('check result  ',check_result))		
+		print('------')
+				
+
+test(use_case1)
 print('get matching condition:')
 print(get_match_conditions('SLE', '3', 'admin'))
