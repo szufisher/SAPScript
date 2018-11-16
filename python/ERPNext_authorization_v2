@@ -406,26 +406,26 @@ def _get_match_conditions(doctype, act='read', user=None, tables=[], parent_doct
 	auth_field = auths[i][2]
 	table2_alias = tables[0] if tables else '`tab%s`' % doctype
 	if parent_doctype:	# make sure child table already joined
-		child_table =[i for i in tables if i[2] == '`tab%s`' % doctype]		
+		child_table =[j for j in tables if j[2] == '`tab%s`' % doctype]		
 		if child_table:
 			table2_alias = child_table[5]
 		else:
 			table1 = "`tab%s`" %(parent_doctype)
-			table2_alias = '`%s_%s`' %(parent_doctype, auth_field)
+			table2_alias = '`%s_%s`' %(parent_doctype, auth_field.split('.',1)[0])
 			table =[table1, "name", "`tab%s`" % (doctype), "parent", table1, table2_alias]
 			tables.append(table)	
 	if '.' in auth_field:	# handle 1 level link field's subfield
         	link_field, sub_field =auth_field.split('.', 1)
         	link_doctype = frappe.get_meta(doctype).get_link_doctype(link_field)
 		link_table_name = "`tab%s`" % link_doctype
-		link_table = [j for j in tables if j[2] == link_table_name]
+		link_table = [k for k in tables if k[2] == link_table_name]
 		if link_table:
 			table2_alias = link_table[5]
 		else:
 			table1 = "`tab%s`" %(doctype)
 			table1_alias = table2_alias if parent_doctype else table1
 			table2_alias = '`%s_%s`' %(doctype, link_field)
-			table = [table1, link_field, link_table_name, "name", table1, table2_alias]
+			table = [table1, link_field, link_table_name, "name", table1_alias,table2_alias]
 			tables.append(table)
         field_condition = build_condition(auths[i], table2_alias)
         result += field_condition
