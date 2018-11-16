@@ -1,3 +1,4 @@
+# Copyright (c) 2015, Frappe Technologies Pvt. Ltd. and Contributors
 # MIT License. See license.txt
 
 from __future__ import unicode_literals, print_function
@@ -417,7 +418,7 @@ def _get_match_conditions(doctype, act='read', user=None, tables=[], parent_doct
         	link_field, sub_field =auth_field.split('.', 1)
         	link_doctype = frappe.get_meta(doctype).get_link_doctype(link_field)
 		link_table_name = "`tab%s`" % link_doctype
-		link_table = [i for i in tables if i[2] == link_table_name]
+		link_table = [j for j in tables if j[2] == link_table_name]
 		if link_table:
 			table2_alias = link_table[5]
 		else:
