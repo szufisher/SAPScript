@@ -1,4 +1,3 @@
-# Copyright (c) 2015, Frappe Technologies Pvt. Ltd. and Contributors
 # MIT License. See license.txt
 
 from __future__ import unicode_literals, print_function
@@ -8,8 +7,8 @@ from frappe import _, msgprint
 from frappe.utils import cint
 import frappe.share
 
-rights_map = {"read": 11, "print": 12, "email": 13, "export": 14, "report": 15, "share": 16,
-              "create": 21, "write": 22, "delete": 23, "amend": 24, "cancel": 25, "import": 26, "submit": 27}
+rights_map = {"read": '11', "print": '12', "email": '13', "export": '14', "report": '15', "share": '16',
+              "create": '21', "write": '22', "delete": '23', "amend": '24', "cancel": '25', "import": '26', "submit": '27'}
 
 """refactor user permission system
 core concept:requested authorizations(the doc) against assigned authorizations by multi auth objs
@@ -333,10 +332,13 @@ def _auth_check(doc, act, user, doctype=None, trace=0):
             return len(result) > 0
 
 
-def get_match_conditions(doctype, act='read', user=None,table_alias=None):
+def get_match_conditions(doctype, act='read', user=None,tables=[], parent_doctype=None):
     """" cached version of _get_match_condition"""
+    act = rights_map.get(act) if act in rights_map.keys() else act
     auth_key = '%s:match_condition' % doctype
-    return frappe.cache().hget(user, auth_key, lambda: _get_match_conditions(doctype, act, user))
+    result = frappe.cache().hget(user, auth_key)
+    return result if result is not None else _get_match_conditions(doctype=doctype, act=act, user=user, 
+								tables=tables, parent_doctype=parent_doctype)
 
 
 def _get_match_conditions(doctype, act='read', user=None, tables=[], parent_doctype=None):
@@ -371,10 +373,14 @@ def _get_match_conditions(doctype, act='read', user=None, tables=[], parent_doct
             condition = ' or '.join(["%s%s" % (k, condition_value) for k in auth_field.split('|')])
         return condition
 
+    if not tables:
+	tables = []
+    if not parent_doctype:
+	parent_doctype = ''
+    act = rights_map.get(act) if act in rights_map.keys() else act
     auths = get_doctype_authorizations(doctype, act, user, usage='match')
     result = ''
     count = len(auths)
-    table_alias = table_alias if table_alias else '`tab%s`' % doctype
     for i in range(count):
         pre_auth_id = auths[i - 1][0] if i > 0 else ''
         pre_auth_obj = auths[i - 1][1] if i > 0 else ''
@@ -396,7 +402,7 @@ def _get_match_conditions(doctype, act='read', user=None, tables=[], parent_doct
             result += '('
         else:
             result += ' or '
-	auth_field = auths[2]
+	auth_field = auths[i][2]
 	table2_alias = tables[0] if tables else '`tab%s`' % doctype
 	if parent_doctype:	# make sure child table already joined
 		child_table =[i for i in tables if i[2] == '`tab%s`' % doctype]		
@@ -404,13 +410,13 @@ def _get_match_conditions(doctype, act='read', user=None, tables=[], parent_doct
 			table2_alias = child_table[5]
 		else:
 			table1 = "`tab%s`" %(parent_doctype)
-			table2_alias = '`%s_%s` %(parent_doctype, auth_field)
+			table2_alias = '`%s_%s`' %(parent_doctype, auth_field)
 			table =[table1, "name", "`tab%s`" % (doctype), "parent", table1, table2_alias]
 			tables.append(table)	
 	if '.' in auth_field:	# handle 1 level link field's subfield
         	link_field, sub_field =auth_field.split('.', 1)
         	link_doctype = frappe.get_meta(doctype).get_link_doctype(link_field)
-		link_table_name = `tab%s` % link_doctype
+		link_table_name = "`tab%s`" % link_doctype
 		link_table = [i for i in tables if i[2] == link_table_name]
 		if link_table:
 			table2_alias = link_table[5]
