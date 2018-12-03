@@ -136,13 +136,13 @@ class TestAuthorizations(unittest.TestCase):
         self.assertTrue(item1.has_permission("read"))
 
         frappe.set_user('test12@b.c')
-	print('item1 user 2 read:')
+	print('user 2 read item1 mandatory object:')
         self.assertFalse(item1.has_permission("read"))
 
         doctype_item.set('authorization_objects',[{'authorization_object':'test-item_mandatory', 'mandatory':'0'}])
-        doctype_item.save(ignore_permissions=1)
 	frappe.clear_cache('test12@b.c')
-	print('user2 read item1/optional obj:')
+        doctype_item.save(ignore_permissions=1)
+	print('user2 read item1 optional obj:')
         self.assertTrue(item1.has_permission("read"))
 
         frappe.set_user('Administrator')
@@ -189,17 +189,14 @@ class TestAuthorizations(unittest.TestCase):
 	frappe.db.sql('delete from tabToDo where owner =%(user)s  or assigned_by=%(user)s', {'user':'test11@b.c'})
         todo1.insert(ignore_permissions=1)
         todo2.insert(ignore_permissions=1)
-	print('get_list test user1 return 2 records :')
+	print('user1 get_list return 2 records:')
 	self.assertTrue(len(frappe.get_list('ToDo'))==2)
-		
-        frappe.set_user('test12@b.c')
-	print('user 2 read todo1:')
-        self.assertFalse(todo1.has_permission("read"))
-	
 	frappe.db.sql('delete from tabToDo where owner =%(user)s  or assigned_by=%(user)s', {'user':'test11@b.c'})
+	
         frappe.set_user('Administrator')
         doctype_todo.set('authorization_objects',[])
         doctype_todo.save(ignore_permissions=1)
+	frappe.delete_doc('Authorization Object','test-multi_or_fields',ignore_permissions=1, force=1)
         user = frappe.get_doc('User', 'test11@b.c')
 	user.flags.ignore_permissions =1
 	user.remove_roles('test-role-multi_or_fields')
@@ -207,11 +204,14 @@ class TestAuthorizations(unittest.TestCase):
 
     def test_sub_fields(self):
 	frappe.set_user('Administrator')
-	frappe.db.sql('delete from tabCustomer where name like "test-customer%"')
         frappe.get_doc({'doctype': 'Customer', 'customer_name': 'test-customer1', 'customer_group': 'Commercial'}).insert(ignore_permissions=1)
         frappe.get_doc({'doctype': 'Customer', 'customer_name': 'test-customer2', 'customer_group': 'Individual'}).insert(ignore_permissions=1)
+	frappe.db.sql('delete from tabItem where name=%(item)s', {'item':'test-item1'})
+	frappe.get_doc({'doctype': 'Item', 'item_code': 'test-item1', 'item_group': 'Services', 'is_stock_item':0}).insert(ignore_permissions=1)
 	so1=frappe.get_doc({'doctype':'Sales Order','customer':'test-customer1', 'delivery_date':nowdate(),'items':[{'item_code':'test-item1'}]})
 	so2=frappe.get_doc({'doctype':'Sales Order','customer':'test-customer2', 'delivery_date':nowdate(),'items':[{'item_code':'test-item1'}]})
+	frappe.get_doc({'doctype':'Sales Order','customer':'test-customer2', 'delivery_date':nowdate(),'items':[{'item_code':'test-item1'}]})
+
 	frappe.delete_doc('Authorization Object','test-sub_fields',ignore_permissions=1, force=1)
         frappe.get_doc({'doctype': 'Authorization Object', 'description': 'test-sub_fields',
 				   'auth_field':[{'fieldname':'act'},
@@ -246,6 +246,7 @@ class TestAuthorizations(unittest.TestCase):
         frappe.set_user('Administrator')
         doctype_so.set('authorization_objects',[])
         doctype_so.save(ignore_permissions=1)
+	frappe.delete_doc('Authorization Object','test-sub_fields',ignore_permissions=1, force=1)
         user = frappe.get_doc('User', 'test11@b.c')
 	user.flags.ignore_permissions =1
 	user.remove_roles('test-role-sub_fields')
@@ -280,11 +281,11 @@ class TestAuthorizations(unittest.TestCase):
 	print('get employee 1:')
         self.assertTrue(bool(emp1.cell_number))
 	emp1.apply_fieldlevel_read_permissions()
-        self.assertTrue(bool(emp1.cell_number))
+	self.assertTrue(bool(emp1.cell_number))
 	print('get employee 2:')
 	self.assertTrue(bool(emp2.cell_number))
 	emp2.apply_fieldlevel_read_permissions()
-        self.assertFalse(bool(emp2.cell_number))
+	self.assertFalse(bool(emp2.cell_number))
 
         frappe.set_user('Administrator')
 	for field in doctype_emp.get('fields'):
