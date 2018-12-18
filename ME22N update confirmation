@@ -1,0 +1,219 @@
+Global session As Object
+Global entries As Object
+Global tbl_conf As Object
+Global cur_row As Object
+Global cmb_po_item As Object
+Global row_index As Integer
+
+Sub ME22N_Change_Order_confirmation()
+    Set SapGuiAuto = GetObject("SAPGUI")  'Get the SAP GUI Scripting object
+    Set SAPApp = SapGuiAuto.GetScriptingEngine 'Get the currently running SAP GUI
+    Set SAPCon = SAPApp.Children(0) 'Get the first system that is currently connected
+    Set session = SAPCon.Children(0) 'Get the first session (window) on that connection
+    Dim item As String
+    Dim mode As String
+    Dim old_delivery_date As String
+    Dim seq As String
+    Dim to_be_conf_qty As Double
+    
+    last_row = LastRow(ActiveSheet)
+    If last_row > 7 Then
+        Range("H7:J" + CStr(last_row)).Select
+        Selection.ClearContents
+        Range("A1").Select
+    End If
+    For i = 7 To last_row
+        po = Cells(i, 1)
+        prev_po = Cells(i - 1, 1)
+        item = CStr(Cells(i, 2).Text)
+        prev_item = Cells(i - 1, 2)
+        old_delivery_date = Cells(i, 4)
+        old_qty = Cells(i, 5)
+        new_delivery_date = Cells(i, 6)
+        new_qty = Cells(i, 7)
+        seq = Cells(i, 3)
+        If po = "" Then Exit For
+        If po <> prev_po Then  'processing new order
+            err_msg = ""
+            session.findById("wnd[0]").maximize
+            session.findById("wnd[0]/tbar[0]/okcd").Text = "/nME22N"
+            session.findById("wnd[0]").sendVKey 0
+            session.findById("wnd[0]/tbar[1]/btn[17]").press
+            session.findById("wnd[1]/usr/subSUB0:SAPLMEGUI:0003/ctxtMEPO_SELECT-EBELN").Text = po '"4503491248"
+            session.findById("wnd[1]/tbar[0]/btn[0]").press
+            messagtype = session.findById("wnd[0]/sbar").MessageType
+            If MessageType = "E" Then
+                err_msg = session.findById("wnd[0]/sbar").Text
+                GoTo next_purchase_item
+            ElseIf MessageType = "W" Then
+                session.findById("wnd[0]").sendVKey 0
+            End If
+            Set entries = session.findById("wnd[0]/usr").FindByNameEx("DYN_6000-LIST", 34).entries
+        End If
+        'session.findById("wnd[0]/usr/subSUB0:SAPLMEGUI:0016/subSUB3:SAPLMEVIEWS:1100/subSUB1:SAPLMEVIEWS:4002/btnDYN_4000-BUTTON").press
+        If err_msg = "" And (po <> prev_po Or (po = prev_po And item <> prev_item)) Then 'processing new order /item
+            ' make sure total be confirmed quantity not greater than item quantity
+            row_index = 0
+            Set cmb_po_item = session.findById("wnd[0]/usr").FindByNameEx("DYN_6000-LIST", 34) ' combobox
+            If get_item(cmb_po_item.value) <> item Then
+                item_key = get_key(item)
+                On Error Resume Next
+                    cmb_po_item.Key = item_key
+                If Err.Number <> 0 Then
+                    err_msg = "item does not exist or invalid"
+                    GoTo next_purchase_item
+                End If
+            End If
+            session.findById("wnd[0]/usr").FindByNameEx("TABIDT4", 91).Select 'swith to quantity tab sheet
+            po_item_qty = CDbl(session.findById("wnd[0]/usr/").FindByNameEx("MEPO1311-MENGE", 31).Text)
+            to_be_conf_qty = 0
+            For j = i To last_row
+                to_be_conf_qty = to_be_conf_qty + Cells(j, 7)
+                If po <> Cells(j + 1, 1) Or (po = Cells(j + 1, 1) And item <> Cells(j + 1, 2)) Then
+                    If to_be_conf_qty > po_item_qty Then
+                        err_msg = "For purchase Order-Item:" & po & "-" & item & _
+                                " the total to be confirmed qty:" & CStr(to_be_conf_qty) & " > po item qty:" & CStr(po_item_qty)
+                        Cells(j, 10) = err_msg
+                        i = j
+                        GoTo next_purchase_item
+                    End If
+                    Exit For
+                End If
+            Next j
+            session.findById("wnd[0]/usr").FindByNameEx("TABIDT16", 91).Select ' switch to confirmation tab sheet
+            On Error Resume Next
+                Set tbl_conf = session.findById("wnd[0]/usr").FindByNameEx("SAPLEINBTC_0300", 80) ' confirmation table
+            If Err.Number <> 0 Then
+                err_msg = "item not relevant for confirmation"
+                Cells(i, 8) = err_msg
+                GoTo next_purchase_item
+            End If
+        End If
+        If err_msg = "" Then
+            mode = "Edit"
+            If old_delivery_date = "" Then mode = "Add"
+            Call set_row(mode, old_delivery_date, seq)
+            If cur_row Is Nothing Then
+                err_msg = "to be updated schedule line with date:" + old_delivery_date + " and sequence:" + seq + " does not exist!"
+                Cells(i, 8) = err_msg
+                GoTo next_purchase_item
+            End If
+            cur_row(0).Text = "AB"
+            cur_row(1).Text = "D"
+            cur_row(2).Text = new_delivery_date
+            cur_row(4).Text = new_qty
+            session.findById("wnd[0]").sendVKey 0
+            On Error Resume Next
+                session.findById ("wnd[1]")
+            If Err.Number = 0 Then
+                err_msg = session.findById("wnd[1]").PopupDialogText
+                session.findById("wnd[1]").Close
+                Cells(i, 8) = err_msg
+            End If
+            msg_type = session.findById("wnd[0]/sbar").MessageType
+            warning_msg = ""
+            For w = 1 To 5  'suppress the warning message by pressing ENTER Key
+                If msg_type = "W" Then
+                    msg = session.findById("wnd[0]/sbar").Text
+                    If warning_msg = "" Then
+                        warning_msg = msg
+                    Else
+                        warning_msg = warning_msg + Chr(13) + msg
+                    End If
+                    session.findById("wnd[0]").sendVKey 0
+                    msg_type = session.findById("wnd[0]/sbar").MessageType
+                Else
+                    Exit For
+                End If
+            Next w
+            msg = session.findById("wnd[0]/sbar").Text
+            If msg = "" Then msg = "schedule line update OK"
+            Cells(i, 8) = msg
+            Cells(i, 9) = warning_msg
+        End If
+        If Cells(i + 1, 1) <> po Then  'the last line of the current po
+            If err_msg = "" Then
+                session.findById("wnd[0]/tbar[0]/btn[11]").press
+                On Error Resume Next
+                    session.findById ("wnd[1]/usr/btnSPOP-VAROPTION1")
+                If Err.Number = 0 Then
+                    session.findById("wnd[1]/usr/btnSPOP-VAROPTION1").press
+                End If
+                Cells(i, 10) = session.findById("wnd[0]/sbar").Text
+            Else
+                Cells(i, 10) = "Failed update purchase order, check the item level error message "
+            End If
+        End If
+next_purchase_item:
+    Next i
+    Set cmb_po_item = Nothing
+    Set entries = Nothing
+    Set tbl_conf = Nothing
+    Set cur_row = Nothing
+    If Not SAPApp Is Nothing Then
+        SAPApp.HistoryEnabled = True  'improve the performance
+        Set session = Nothing
+        Set SAPCon = Nothing
+        Set SAPApp = Nothing
+        Set SapGuiAuto = Nothing
+        'Application.ScreenUpdating = True
+        MsgBox "Process Completed"
+    End If
+End Sub
+
+Function LastRow(sh As Worksheet)
+    On Error Resume Next
+    LastRow = sh.Cells.Find(What:="*", _
+                            After:=sh.Range("A1"), _
+                            Lookat:=xlPart, _
+                            LookIn:=xlFormulas, _
+                            SearchOrder:=xlByRows, _
+                            SearchDirection:=xlPrevious, _
+                            MatchCase:=False).Row
+    On Error GoTo 0
+End Function
+
+Sub set_row(mode As String, delivery_date As String, seq As String)
+    'use old delivery date and sequence number to locate the to-be updated record
+    Set tbl_conf = session.findById("wnd[0]/usr").FindByNameEx("SAPLEINBTC_0300", 80)
+    record_count = tbl_conf.verticalScrollbar.Maximum
+    If mode = "Edit" Then
+        tbl_conf.verticalScrollbar.Position = 0
+        For m = 1 To record_count + 1
+            Set cur_row = session.findById("wnd[0]/usr").FindByNameEx("SAPLEINBTC_0300", 80).Rows(0)
+            If cur_row(2).Text = delivery_date And cur_row(15).Text = seq Then
+                Exit Sub
+            End If
+            'everytime the context change, set obj should be refreshed, otherwise program exit!
+            Set tbl_conf = session.findById("wnd[0]/usr").FindByNameEx("SAPLEINBTC_0300", 80)
+            tbl_conf.verticalScrollbar.Position = tbl_conf.verticalScrollbar.Position + 1
+        Next m
+        Set cur_row = Nothing
+    Else
+        tbl_conf.verticalScrollbar.Position = record_count + 1
+        If row_index = 0 And record_count = 0 Then  '1st confirmation for item with no existing confirmation
+            row_index = 0
+        Else                      ' subsequent confirmation
+            row_index = 1
+        End If
+        Set cur_row = session.findById("wnd[0]/usr").FindByNameEx("SAPLEINBTC_0300", 80).Rows(row_index)
+        row_index = 1
+    End If
+End Sub
+
+Function get_item(value As String)
+    'extract the PO item from the combobox value property
+    pos = InStr(1, value, "]")
+    get_item = Trim(Mid(value, 2, pos - 2))
+End Function
+
+Function get_key(item As String)
+    'use PO item to retrieve the internal key, for switch PO item
+    For ii = 0 To entries.Count - 1
+        If get_item(entries(ii).value) = item Then
+            get_key = entries(ii).Key
+            Exit Function
+        End If
+    Next ii
+    get_key = ""
+End Function
