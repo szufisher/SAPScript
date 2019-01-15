@@ -39,8 +39,8 @@ Sub ME21N_create_po()
 
     Dim intRow, i, last_po, Ct, row ' Ct: current counter of line item
     ' Create the connection string.
-    sConnString = "Provider=SQLOLEDB;Data Source='x.x.x.x';" & _
-                  "Initial Catalog='xxx';" & _
+    sConnString = "Provider=SQLOLEDB;Data Source='xxxx';" & _
+                  "Initial Catalog='xxxx';" & _
                   "Integrated Security=SSPI;Trusted_connection=yes"
     ' Create the Connection and Recordset objects.
     Set conn = New ADODB.Connection
@@ -75,7 +75,7 @@ Sub ME21N_create_po()
         session.findById("wnd[0]/usr").FindByNameEx("TABHDT5", 91).Select
         session.findById("wnd[0]/usr").FindByNameEx("MEPOCOMM-UNSEZ", 31).Text = po '"id006"
         session.findById("wnd[0]").sendVKey 0
-        If session.findById("wnd[0]/sbar").MessageType = "E" Then
+        If session.findById("wnd[0]/sbar").messagetype = "E" Then
             MsgBox "Error with message: " & session.findById("wnd[0]/sbar").Text
             Exit Sub
         End If
@@ -149,9 +149,11 @@ Sub ME21N_create_po()
             session.findById("wnd[0]/usr").FindByNameEx("TABIDT12", 91).Select
             If row = 0 Then  'start of cost split when new item with cost split
                 On Error Resume Next   'check whether the pencentage column in split table is visible/can
-                    session.findById("wnd[0]/usr").FindByNameEx("SAPLMEACCTVIDYN_1000TC", 80).Name
-                If Err.Number <> 0 Then
+                    Set cost_split_table = session.findById("wnd[0]/usr").FindByNameEx("SAPLMEACCTVIDYN_1000TC", 80)
+                If cost_split_table Is Nothing Then
                     session.findById("wnd[0]/usr").FindByNameEx("MEACCT1200TB", 50).FindByNameEx("shell", 122).pressButton "MEAC1200DETAILTOGGLE"
+                Else
+                    Set cost_split_table = Nothing
                 End If
                 session.findById("wnd[0]/usr").FindByNameEx("MEACCT1200-VRTKZ", 34).Key = "2"
                 session.findById("wnd[0]/usr").FindByNameEx("MEACCT1200-TWRKZ", 34).Key = "2"
@@ -177,9 +179,11 @@ Sub ME21N_create_po()
             If UCase(aac) = "K" Or UCase(aac) = "F" Or UCase(aac) = "P" Or UCase(aac) = "A" Then
                 'Fisher 2018-04-12 handle the case that the previous item is cost split, the next item is non cost split
                 On Error Resume Next
-                    session.findById("wnd[0]/usr").FindByNameEx("MEACCT1100-ABLAD", 31).Name
-                If Err.Number <> 0 Then
-                    session.findById("wnd[0]/usr").FindByNameEx("MEACCT1200TB", 50).FindByName("shell", 122).pressButton "MEAC1200DETAILTOGGLE"
+                    Set unloading_field = session.findById("wnd[0]/usr").FindByNameEx("MEACCT1100-ABLAD", 31)
+                If unloading_field Is Nothing Then
+                    session.findById("wnd[0]/usr").FindByNameEx("MEACCT1200TB", 50).FindByNameEx("shell", 122).pressButton "MEAC1200DETAILTOGGLE"
+                Else
+                    Set unloading_field = Nothing
                 End If
                 '2018-04-12
                 session.findById("wnd[0]/usr").FindByNameEx("TABIDT12", 91).Select
@@ -198,11 +202,7 @@ Sub ME21N_create_po()
                     session.findById("wnd[0]/usr").FindByNameEx("COBL-ANLN1", 32).Text = asset  '"830702"
                     session.findById("wnd[0]/usr").FindByNameEx("COBL-ANLN2", 32).Text = "0" '"830702"
                 End If
-                session.findById("wnd[0]").sendVKey 0
-                MessageType = session.findById("wnd[0]/sbar").MessageType
-                If MessageType = "W" Then
-                    session.findById("wnd[0]").sendVKey 0
-                End If
+                msg = press_enter_key()
             End If
         End If
         If cost_split_count = 1 And tax_code <> "" Then   'begin of the item , input the tax code
@@ -239,8 +239,8 @@ Sub ME21N_create_po()
     If Err.Number = 0 Then
         session.findById("wnd[1]/tbar[0]/btn[0]").press
     End If
-    MessageType = session.findById("wnd[0]/sbar").MessageType
-    If MessageType = "W" Then session.findById("wnd[0]").sendVKey 0
+    messagetype = session.findById("wnd[0]/sbar").messagetype
+    If messagetype = "W" Then session.findById("wnd[0]").sendVKey 0
     
     On Error Resume Next  'in case there is error in new PO, save (hold) the PO by press ENTER on the popup window
        session.findById ("wnd[1]/usr/btnSPOP-VAROPTION1")
@@ -262,5 +262,20 @@ Sub ME21N_create_po()
     Set Connection = Nothing
     Set SAPApp = Nothing
     Set SapGuiAuto = Nothing
-    MsgBox "Process Completed with return message: " & session.findById("wnd[0]/sbar").Text
+    MsgBox "Process Completed with result: " & result & " and error messages:" & msg
 End Sub
+
+Function press_enter_key()
+    session.findById("wnd[0]").sendVKey 0
+    For i = 1 To 5
+        messagetype = session.findById("wnd[0]/sbar").messagetype
+        If messagetype = "W" Then
+            session.findById("wnd[0]").sendVKey 0
+        ElseIf messagetype = "E" Then
+            press_enter_key = session.findById("wnd[0]/sbar").Text
+            Exit For
+        Else
+            Exit For
+        End If
+    Next i
+End Function
