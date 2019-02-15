@@ -3,24 +3,15 @@ Sub upload_attachment()
     Set SAPApp = SapGuiAuto.GetScriptingEngine 'Get the currently running SAP GUI
     Set SAPCon = SAPApp.Children(0) 'Get the first system that is currently connected
     Set session = SAPCon.Children(0) 'Get the first session (window) on that connection
-
+    
     For i = 2 To ActiveSheet.UsedRange.Rows.Count
         If Cells(i, 1) = "" Then Exit For
-        If UCase(Right(Cells(i, 2), 4)) <> ".PDF" Then
-            Cells(i, 4) = "Record skipped due to no .pdf suffix"
-            GoTo next_record
-        End If
         session.findById("wnd[0]").maximize
-        session.findById("wnd[0]/tbar[0]/okcd").Text = "/nme23n"
+        session.findById("wnd[0]/tbar[0]/okcd").Text = "/nfb03"
         session.findById("wnd[0]").sendVKey 0
-        session.findById("wnd[0]/tbar[1]/btn[17]").press
-        session.findById("wnd[1]/usr/subSUB0:SAPLMEGUI:0003/ctxtMEPO_SELECT-EBELN").Text = Cells(i, 1) '"4503810497"
-        messagetype = session.findById("wnd[0]/sbar").messagetype
-        If messagetype = "E" Then
-            Cells(i, 4) = session.findById("wnd[0]/sbar").Text
-            GoTo next_record
-        End If
-        'open another script to handle the file select dialog, otherwise it stucks endless
+        session.findById("wnd[0]/usr/txtRF05L-BELNR").Text = Cells(i, 1) '"11000040"
+        session.findById("wnd[0]").sendVKey 0
+        
         Filename = Cells(i, 2)
         Set Wshell = CreateObject("WScript.Shell")
         Wshell.Run "d:\click.vbs " & Filename, 1, False
@@ -29,10 +20,9 @@ Sub upload_attachment()
         session.findById("wnd[0]/titl/shellcont/shell").selectContextMenuItem "%GOS_VIEW_ATTA"
         session.findById("wnd[1]/usr/cntlCONTAINER_0100/shellcont/shell").pressToolbarContextButton "%ATTA_CREATE"
         session.findById("wnd[1]/usr/cntlCONTAINER_0100/shellcont/shell").selectContextMenuItem "%GOS_ARL_LINK"
-        session.findById("wnd[2]/usr/ssubSUB110:SAPLALINK_DRAG_AND_DROP:0110/cntlSPLITTER/shellcont/shellcont/shell/shellcont[0]/shell").selectItem "0000000006", "HITLIST"
-        session.findById("wnd[2]/usr/ssubSUB110:SAPLALINK_DRAG_AND_DROP:0110/cntlSPLITTER/shellcont/shellcont/shell/shellcont[0]/shell").doubleClickItem "0000000006", "HITLIST"
+        session.findById("wnd[2]/usr/ssubSUB110:SAPLALINK_DRAG_AND_DROP:0110/cntlSPLITTER/shellcont/shellcont/shell/shellcont[0]/shell").selectItem "0000000003", "HITLIST"
+        session.findById("wnd[2]/usr/ssubSUB110:SAPLALINK_DRAG_AND_DROP:0110/cntlSPLITTER/shellcont/shellcont/shell/shellcont[0]/shell").doubleClickItem "0000000003", "HITLIST"
         
-        Application.Wait (Now + TimeValue("0:00:02"))
         process_ok = False
         For k = 1 To 10
             On Error Resume Next
@@ -48,15 +38,14 @@ Sub upload_attachment()
         
         If process_ok = True Then
             session.findById("wnd[3]/tbar[0]/btn[0]").press
-            session.findById("wnd[2]/usr/ssubSUB110:SAPLALINK_DRAG_AND_DROP:0110/cntlSPLITTER/shellcont/shellcont/shell/shellcont[1]/shell").setSelectionIndexes 76, 102
             session.findById("wnd[2]/tbar[0]/btn[0]").press
             session.findById("wnd[1]/tbar[0]/btn[0]").press
             Cells(i, 4) = "uploaded successful"
         Else
             Cells(i, 4) = "uploaded failed"
         End If
-next_record:
     Next i
+    
 End Sub
 
 d:\click.vbs
