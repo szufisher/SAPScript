@@ -15,6 +15,7 @@ Sub upload_attachment()
         session.findById("wnd[0]").sendVKey 0
         session.findById("wnd[0]/tbar[1]/btn[17]").press
         session.findById("wnd[1]/usr/subSUB0:SAPLMEGUI:0003/ctxtMEPO_SELECT-EBELN").Text = Cells(i, 1) '"4503810497"
+	session.findById("wnd[1]/tbar[0]/btn[0]").press
         messagetype = session.findById("wnd[0]/sbar").messagetype
         If messagetype = "E" Then
             Cells(i, 4) = session.findById("wnd[0]/sbar").Text
