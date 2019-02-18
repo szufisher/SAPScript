@@ -1,0 +1,80 @@
+Sub download()
+    Set SapGuiAuto = GetObject("SAPGUI")  'Get the SAP GUI Scripting object
+    Set SAPApp = SapGuiAuto.GetScriptingEngine 'Get the currently running SAP GUI
+    Set SAPCon = SAPApp.Children(0) 'Get the first system that is currently connected
+    Set session = SAPCon.Children(0) 'Get the first session (window) on that connection
+    row_index = 0
+    title_extracted = False
+    
+    For i = 2 To Sheets(2).UsedRange.Rows.Count
+        material = Sheets(2).Cells(i, 1)
+        plant = Sheets(2).Cells(i, 2)
+        valid_date = Sheets(2).Cells(i, 3)
+        session.findById("wnd[0]").maximize
+        session.findById("wnd[0]/tbar[0]/okcd").Text = "/ncs15"
+        session.findById("wnd[0]").sendVKey 0
+        session.findById("wnd[0]/usr/chkRC29L-MATTP").Selected = True
+        session.findById("wnd[0]/usr/ctxtRC29L-MATNR").Text = material '"10127155"
+        If valid_date <> "" Then
+            session.findById("wnd[0]/usr/ctxtRC29L-DATUV").Text = valid_date '"17.02.2019"
+        End If
+        session.findById("wnd[0]/tbar[1]/btn[5]").press
+        session.findById("wnd[0]/usr/chkRC29L-MEHRS").Selected = True
+        session.findById("wnd[0]/usr/txtRC29L-EMENG").Text = "1"
+        session.findById("wnd[0]/usr/ctxtRC29L-WERKS").Text = plant
+        session.findById("wnd[0]/tbar[1]/btn[8]").press
+        On Error Resume Next
+        Set grid = session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell/shellcont[1]/shell") '.selectColumn "DSTUF"
+        If Err.Number <> 0 Then
+            row_count = 1
+            empty_row_count = 0
+            Cells(row_index + 1, 1) = material
+            Cells(row_index + 1, 2) = session.findById("wnd[0]/sbar").Text
+            GoTo next_record
+        End If
+        row_count = grid.RowCount - 1
+        Col_count = grid.ColumnCount - 1
+        Set Column = grid.ColumnOrder()
+        If title_extracted = False Then
+            Cells(1, 1) = "Search Mateial"
+            For m = 0 To Col_count
+                Set ColumnTitle = grid.GetColumnTitles(CStr(Column(m)))
+                Cells(1, m + 2) = CStr(ColumnTitle(0))
+              Next m
+            title_extracted = True
+        End If
+        empty_row_count = 0
+        For j = 0 To row_count
+            If grid.GetCellValue(j, CStr(Column(0))) = "" Then   'Exit For     'skip empty row
+                empty_row_count = empty_row_count + 1
+            Else
+                Cells(row_index + j + 2 - empty_row_count, 1) = material
+                For k = 0 To Col_count
+                    grid.SetCurrentCell i, CStr(Column(0))
+                    Cells(row_index + j + 2 - empty_row_count, k + 2) = grid.GetCellValue(j, CStr(Column(k)))
+                Next k
+            End If
+            grid.FirstVisibleRow = j
+        Next j
+next_record:
+        row_index = row_index + row_count - empty_row_count
+        'session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell/shellcont[1]/shell").selectColumn "STLAN"
+        'session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell/shellcont[1]/shell").selectColumn "DPOSN"
+        'session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell/shellcont[1]/shell").selectColumn "DIMNG"
+        'session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell/shellcont[1]/shell").selectColumn "OJTXB"
+        'session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell/shellcont[1]/shell").selectColumn "MEOPO"
+        'session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell/shellcont[1]/shell").selectColumn "BMEIN"
+        'session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell/shellcont[1]/shell").selectColumn "MATNR"
+        'session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell/shellcont[1]/shell").selectColumn "WERKS"
+        'session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell/shellcont[1]/shell").selectColumn "IDNRK"
+
+    Next i
+    
+    If Not SAPApp Is Nothing Then
+        Set session = Nothing
+        Set SAPCon = Nothing
+        Set SAPApp = Nothing
+        Set SapGuiAuto = Nothing
+        MsgBox "Process Completed"
+    End If
+End Sub
