@@ -1,0 +1,30 @@
+Sub combine()
+    Dim wbk As Workbook
+    Dim wbk1 As Workbook
+    Set wbk1 = ThisWorkbook
+    Dim Filename As String
+    Dim Path As String
+     
+    Path = "D:\test\"
+    Filename = Dir(Path & "*.xlsx")
+    Do While Len(Filename) > 0 And Filename <> "book1.xsm"
+        Set wbk = Workbooks.Open(Path & Filename)
+        wbk.Activate
+        Range("A2").Select
+        Range(Selection, Selection.End(xlToRight)).Select
+        Range(Selection, Selection.End(xlDown)).Select
+        Selection.Copy
+        row_count = Cells(Rows.Count, 1).End(xlUp).Row - 1
+        wbk1.Activate
+        Application.DisplayAlerts = False
+        Dim lr As Double
+        lr = wbk1.Sheets("sheet1").Cells(Rows.Count, 1).End(xlUp).Row
+        Sheets("Sheet1").Select
+        Cells(lr + 1, 2).Select
+        ActiveSheet.Paste
+        Range(Cells(lr + 1, 1), Cells(lr + row_count, 1)) = Filename
+        wbk.Close True
+        Filename = Dir
+    Loop
+    MsgBox "All the files are copied and pasted in Book1"
+End Sub
