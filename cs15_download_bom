@@ -3,11 +3,12 @@ Sub download()
     Set SAPApp = SapGuiAuto.GetScriptingEngine 'Get the currently running SAP GUI
     Set SAPCon = SAPApp.Children(0) 'Get the first system that is currently connected
     Set session = SAPCon.Children(0) 'Get the first session (window) on that connection
+    Dim lr As Double
     row_index = 0
     title_extracted = False
     Sheets(1).UsedRange.ClearContents
     
-    For i = 2 To Sheets(2).UsedRange.Rows.Count
+    For i = 3 To Sheets(2).UsedRange.Rows.Count
         material = Sheets(2).Cells(i, 1)
         plant = Sheets(2).Cells(i, 2)
         valid_date = Sheets(2).Cells(i, 3)
@@ -16,64 +17,91 @@ Sub download()
         session.findById("wnd[0]").sendVKey 0
         session.findById("wnd[0]/usr/chkRC29L-MATTP").Selected = True
         session.findById("wnd[0]/usr/ctxtRC29L-MATNR").Text = material '"10127155"
+        session.findById("wnd[0]/usr/chkRC29L-DIRKT").Selected = True
         If valid_date <> "" Then
             session.findById("wnd[0]/usr/ctxtRC29L-DATUV").Text = valid_date '"17.02.2019"
         End If
         session.findById("wnd[0]/tbar[1]/btn[5]").press
-        If session.findById("wnd[0]/sbar").MessageType <> "E" Then  'handle invalid material
+        If session.findById("wnd[0]/sbar").Text = "" Then  'handle invalid material
             session.findById("wnd[0]/usr/chkRC29L-MEHRS").Selected = True
             session.findById("wnd[0]/usr/txtRC29L-EMENG").Text = "1"
             session.findById("wnd[0]/usr/ctxtRC29L-WERKS").Text = plant
             session.findById("wnd[0]/tbar[1]/btn[8]").press
         End If
         If session.findById("wnd[0]/sbar").Text <> "" Then  'no where use case
-            row_count = 0
-            empty_row_count = 0
-            Sheets(1).Cells(row_index + 2, 1) = material
-            Sheets(1).Cells(row_index + 2, 2) = session.findById("wnd[0]/sbar").Text
-        Else
-            On Error Resume Next
-                Set grid = session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell/shellcont[1]/shell") '.selectColumn "DSTUF"
-            If Err.Number = 0 Then
-                row_count = grid.RowCount - 1
-                Col_count = grid.ColumnCount - 1
-                Set Column = grid.ColumnOrder()
-                If title_extracted = False Then
-                    Sheets(1).Cells(1, 1) = "Search Mateial"
-                    For m = 0 To Col_count
-                        Set ColumnTitle = grid.GetColumnTitles(CStr(Column(m)))
-                        Sheets(1).Cells(1, m + 2) = CStr(ColumnTitle(0))
-                      Next m
-                    title_extracted = True
-                End If
+            Sheets(2).Cells(i, 4) = session.findById("wnd[0]/sbar").Text
+            If Sheets(2).Cells(1, 2) = "" Then
+                row_count = 0
                 empty_row_count = 0
-                For j = 0 To row_count
-                    If grid.GetCellValue(j, CStr(Column(0))) = "" Then   'Exit For     'skip empty row
-                        empty_row_count = empty_row_count + 1
-                    Else
-                        Sheets(1).Cells(row_index + j + 2 - empty_row_count, 1) = material
-                        For k = 0 To Col_count
-                            grid.SetCurrentCell j, CStr(Column(0))
-                            Sheets(1).Cells(row_index + j + 2 - empty_row_count, k + 2) = grid.GetCellValue(j, CStr(Column(k)))
-                        Next k
-                    End If
-                    grid.FirstVisibleRow = j
-                Next j
-                Set grid = Nothing
+                Sheets(1).Cells(row_index + 2, 1) = material
+                Sheets(1).Cells(row_index + 2, 2) = session.findById("wnd[0]/sbar").Text
             End If
+        Else
+            'session.findById("wnd[0]/tbar[1]/btn[45]").press 'local file
+            'session.findById("wnd[1]/usr/subSUBSCREEN_STEPLOOP:SAPLSPO5:0150/sub:SAPLSPO5:0150/radSPOPLI-SELFLAG[1,0]").Select  'tab delimited
+            session.findById("wnd[0]/tbar[1]/btn[43]").press ' Excel
+            session.findById("wnd[1]/tbar[0]/btn[0]").press
+            For ii = 1 To 10
+                On Error Resume Next
+                session.findById("wnd[1]/usr/ctxtDY_PATH").Text = Sheets(2).Cells(1, 2) '"d:\sap_upload\"
+                session.findById("wnd[1]/usr/ctxtDY_FILENAME").Text = CStr(material) + ".xlsx" '"book1.xlsx"
+                If Err.Number <> 0 Then
+                    Application.Wait (Now + TimeValue("0:00:01"))
+                Else
+                    Exit For
+                End If
+            Next ii
+            'session.findById("wnd[1]/usr/ctxtDY_FILE_ENCODING").SetFocus
+            session.findById("wnd[1]/tbar[0]/btn[0]").press
+                                    
+            Sheets(2).Cells(i, 4) = "download OK"
+            If Cells(1, 2) = "" Then
+                On Error Resume Next
+                    Set grid = session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell/shellcont[1]/shell") '.selectColumn "DSTUF"
+                If Err.Number = 0 Then
+                    row_count = grid.RowCount - 1
+                    Col_count = grid.ColumnCount - 1
+                    Set Column = grid.ColumnOrder()
+                    If title_extracted = False Then
+                        Sheets(1).Cells(1, 1) = "Search Mateial"
+                        For m = 0 To Col_count
+                            Set ColumnTitle = grid.GetColumnTitles(CStr(Column(m)))
+                            Sheets(1).Cells(1, m + 2) = CStr(ColumnTitle(0))
+                        Next m
+                        title_extracted = True
+                    End If
+                    empty_row_count = 0
+                    For j = 0 To row_count
+                        If grid.GetCellValue(j, CStr(Column(0))) = "" Then   'Exit For     'skip empty row
+                            empty_row_count = empty_row_count + 1
+                        Else
+                            Sheets(1).Cells(row_index + j + 2 - empty_row_count, 1) = material
+                            For k = 0 To Col_count
+                                grid.SetCurrentCell j, CStr(Column(0))
+                                Sheets(1).Cells(row_index + j + 2 - empty_row_count, k + 2) = grid.GetCellValue(j, CStr(Column(k)))
+                            Next k
+                        End If
+                        grid.FirstVisibleRow = j
+                    Next j
+                    Set grid = Nothing
+                End If
+            End If
+            row_index = row_index + row_count + 1 - empty_row_count 'row count +1
+            'session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell/shellcont[1]/shell").selectColumn "STLAN"
+            'session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell/shellcont[1]/shell").selectColumn "DPOSN"
+            'session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell/shellcont[1]/shell").selectColumn "DIMNG"
+            'session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell/shellcont[1]/shell").selectColumn "OJTXB"
+            'session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell/shellcont[1]/shell").selectColumn "MEOPO"
+            'session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell/shellcont[1]/shell").selectColumn "BMEIN"
+            'session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell/shellcont[1]/shell").selectColumn "MATNR"
+            'session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell/shellcont[1]/shell").selectColumn "WERKS"
+            'session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell/shellcont[1]/shell").selectColumn "IDNRK"
         End If
-        row_index = row_index + row_count + 1 - empty_row_count 'row count +1
-        'session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell/shellcont[1]/shell").selectColumn "STLAN"
-        'session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell/shellcont[1]/shell").selectColumn "DPOSN"
-        'session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell/shellcont[1]/shell").selectColumn "DIMNG"
-        'session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell/shellcont[1]/shell").selectColumn "OJTXB"
-        'session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell/shellcont[1]/shell").selectColumn "MEOPO"
-        'session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell/shellcont[1]/shell").selectColumn "BMEIN"
-        'session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell/shellcont[1]/shell").selectColumn "MATNR"
-        'session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell/shellcont[1]/shell").selectColumn "WERKS"
-        'session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell/shellcont[1]/shell").selectColumn "IDNRK"
     Next i
-    
+    If Cells(1, 2) <> "" Then
+        Call combine
+    End If
+            
     If Not SAPApp Is Nothing Then
         Set session = Nothing
         Set SAPCon = Nothing
@@ -81,4 +109,52 @@ Sub download()
         Set SapGuiAuto = Nothing
         MsgBox "Process Completed"
     End If
+End Sub
+
+Sub combine()
+    Dim wbk As Workbook
+    Dim wbk1 As Workbook
+    Set wbk1 = ThisWorkbook
+    Dim Filename As String
+    Dim Path As String
+    Dim header_copied
+    header_copied = False
+    Path = Sheets(2).Cells(1, 2) '"D:\test\"
+    Filename = Dir(Path & "*.xlsx")
+    Do While Len(Filename) > 0 And Filename <> "book1.xsm"
+        Set wbk = Workbooks.Open(Path & Filename)
+        If header_copied = False Then
+            wbk.Activate
+            Range("A1").Select
+            Range(Selection, Selection.End(xlToRight)).Select
+            Range(Selection, Selection.End(1)).Select
+            Selection.Copy
+            wbk1.Activate
+            Application.DisplayAlerts = False
+            Sheets(1).Activate
+            Cells(1, 1) = "search material"
+            Cells(1, 2).Select
+            ActiveSheet.Paste
+            header_copied = True
+        End If
+        wbk.Activate
+        Range("A2").Select
+        Range(Selection, Selection.End(xlToRight)).Select
+        If ActiveSheet.UsedRange.Rows.Count > 2 Then
+            Range(Selection, Selection.End(xlDown)).Select
+        End If
+        Selection.Copy
+        row_count = Cells(Rows.Count, 1).End(xlUp).Row - 1
+        wbk1.Activate
+        Application.DisplayAlerts = False
+        Dim lr As Double
+        lr = wbk1.Sheets(1).Cells(Rows.Count, 2).End(xlUp).Row
+        Sheets(1).Select
+        Cells(lr + 1, 2).Select
+        ActiveSheet.Paste
+        Range(Cells(lr + 1, 1), Cells(lr + row_count, 1)) = Filename
+        wbk.Close True
+        Filename = Dir
+    Loop
+    MsgBox "All the files are copied and pasted in Book1"
 End Sub
