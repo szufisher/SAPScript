@@ -1,4 +1,10 @@
 Sub upload()
+    Set fso = CreateObject("scripting.filesystemobject")
+    Path = Cells(1, 2) + "ok"
+    If Not fso.FolderExists(Path) Then
+        On Error Resume Next
+        fso.CreateFolder Path
+    End If
     If Cells(1, 2) <> "" Then
         Call upload_folder
     Else
@@ -10,6 +16,7 @@ Sub upload_file_list()
     Set SAPApp = SapGuiAuto.GetScriptingEngine 'Get the currently running SAP GUI
     Set SAPCon = SAPApp.Children(0) 'Get the first system that is currently connected
     Set session = SAPCon.Children(0) 'Get the first session (window) on that connection
+    Set fso = CreateObject("scripting.filesystemobject")
     
     If Cells(1, 6) = "" Then
         pdf_filetype_index = "0000000018"
@@ -67,6 +74,7 @@ Sub upload_file_list()
             session.findById("wnd[2]/tbar[0]/btn[0]").press
             session.findById("wnd[1]/tbar[0]/btn[0]").press
             Cells(i, 4) = "uploaded successful"
+            fso.MoveFile Source:=full_name, Destination:=Path + "ok\" + Filename
         Else
             Cells(i, 4) = "uploaded failed"
         End If
@@ -88,6 +96,7 @@ Sub upload_folder()
     Set SAPCon = SAPApp.Children(0) 'Get the first system that is currently connected
     Set session = SAPCon.Children(0) 'Get the first session (window) on that connection
     
+    Set fso = CreateObject("scripting.filesystemobject")
     Dim Filename As String
     Dim Path As String
     
@@ -116,7 +125,6 @@ Sub upload_folder()
             GoTo next_record
         End If
         'open another script to handle the file select dialog, otherwise it stucks endless
-        
         Set Wshell = CreateObject("WScript.Shell")
         Wshell.Run "d:\sap_upload\upload.vbs " & full_name, 1, False
         
@@ -147,15 +155,17 @@ Sub upload_folder()
             session.findById("wnd[2]/usr/ssubSUB110:SAPLALINK_DRAG_AND_DROP:0110/cntlSPLITTER/shellcont/shellcont/shell/shellcont[1]/shell").setSelectionIndexes 76, 102
             session.findById("wnd[2]/tbar[0]/btn[0]").press
             session.findById("wnd[1]/tbar[0]/btn[0]").press
-            Cells(i, 4) = "uploaded successful"
+            fso.MoveFile Source:=full_name, Destination:=Path + "ok\" + Filename
+            Cells(i, 4) = "uploaded OK"
         Else
-            Cells(i, 4) = "uploaded failed"
+            Cells(i, 4) = "upload failed"
         End If
 next_record:
          Filename = Dir
          i = i + 1
     Loop
     
+    Set fso = Nothing
     If Not SAPApp Is Nothing Then
         Set session = Nothing
         Set SAPCon = Nothing
@@ -164,5 +174,4 @@ next_record:
         MsgBox "Process Completed"
     End If
 End Sub
-
 
