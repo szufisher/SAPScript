@@ -24,27 +24,26 @@ Sub ME13_extract_long_text()
         Session.findById("wnd[0]/usr/radRM06I-NORMB").SetFocus
         Session.findById("wnd[0]").sendVKey 0
         Session.findById("wnd[0]/tbar[1]/btn[13]").press  'text button
-        Session.findById("wnd[0]/usr/sub:SAPMM06I:0103/txtRM06I-LTEX1[1,11]").SetFocus
-        'session.findById("wnd[0]/usr/sub:SAPMM06I:0103/txtRM06I-LTEX1[1,11]").caretPosition = 3
-        Session.findById("wnd[0]").sendVKey 2   'double click to swith to editor screen
         SetForegroundWindow hWnd
-        wsh.SendKeys "^a"                     'ctrl + a  to select all text
-        Application.Wait (Now + TimeValue("0:00:003"))
-        Session.findById("wnd[0]/tbar[1]/btn[38]").press  'copy
-        objData.GetFromClipboard
-        strText = objData.GetText()
-        Cells(i, 7) = strText
-        'session.findById("wnd[0]/mbar/menu[1]/menu[4]/menu[0]").Select
-        Session.findById("wnd[0]/tbar[0]/btn[3]").press    'go back
-        Session.findById("wnd[0]/usr/sub:SAPMM06I:0103/txtRM06I-LTEX1[7,11]").SetFocus
         
-        Session.findById("wnd[0]").sendVKey 2   'double click to swith to editor screen
-        wsh.SendKeys "^a"                     'ctrl + a  to select all text
-        Application.Wait (Now + TimeValue("0:00:003")) '
-        Session.findById("wnd[0]/tbar[1]/btn[38]").press  'copy
-        'Cells(i, 8).PasteSpecial
-        objData.GetFromClipboard
-        strText = objData.GetText()
-        Cells(i, 8) = strText
+        If Session.findById("wnd[0]/usr/sub:SAPMM06I:0103/txtRM06I-LTEX1[1,11]").Text <> "" Then
+            Session.findById("wnd[0]/usr/sub:SAPMM06I:0103/txtRM06I-LTEX1[1,11]").SetFocus
+            Session.findById("wnd[0]").sendVKey 2   'double click to swith to editor screen
+            wsh.SendKeys "^a"                     'ctrl + a  to select all text
+            Application.Wait (Now + TimeValue("0:00:003"))
+            Session.findById("wnd[0]/tbar[1]/btn[38]").press  'copy
+            objData.GetFromClipboard
+            Cells(i, 7) = objData.GetText()
+            Session.findById("wnd[0]/tbar[0]/btn[3]").press    'go back
+        End If
+        If Session.findById("wnd[0]/usr/sub:SAPMM06I:0103/txtRM06I-LTEX1[7,11]").Text <> "" Then
+            Session.findById("wnd[0]/usr/sub:SAPMM06I:0103/txtRM06I-LTEX1[7,11]").SetFocus
+            Session.findById("wnd[0]").sendVKey 2   'double click to swith to editor screen
+            wsh.SendKeys "^a"                     'ctrl + a  to select all text
+            Application.Wait (Now + TimeValue("0:00:003")) '
+            Session.findById("wnd[0]/tbar[1]/btn[38]").press  'copy
+            'Cells(i, 8).PasteSpecial  'will paste to multi cells if there is line break
+            objData.GetFromClipboard
+            Cells(i, 8) = objData.GetText()
+        End If
     Next i
-End Sub
