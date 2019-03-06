@@ -1,0 +1,50 @@
+Private Declare Function SetForegroundWindow Lib "user32.dll" _
+  (ByVal hWnd As Long) As Long
+
+Sub ME13_extract_long_text()
+    Dim objData As New MSForms.DataObject
+    Set wsh = CreateObject("WScript.Shell")
+    
+    Set SapGuiAuto = GetObject("SAPGUI")  'Get the SAP GUI Scripting object
+    Set SAPApp = SapGuiAuto.GetScriptingEngine 'Get the currently running SAP GUI
+    Set SAPCon = SAPApp.Children(0) 'Get the first system that is currently connected
+    Set Session = SAPCon.Children(0) 'Get the first session (window) on that connection
+    hWnd = Session.ActiveWindow.Handle
+    
+    For i = 2 To ActiveSheet.UsedRange.Rows.Count
+        If Cells(i, 1) = "" Then Exit For
+        
+        Session.findById("wnd[0]").maximize
+        Session.findById("wnd[0]/tbar[0]/okcd").Text = "/nme13"
+        Session.findById("wnd[0]").sendVKey 0
+        Session.findById("wnd[0]/usr/ctxtEINA-LIFNR").Text = Cells(i, 1) '"9300553"
+        Session.findById("wnd[0]/usr/ctxtEINA-MATNR").Text = Cells(i, 2) '"10964718"
+        Session.findById("wnd[0]/usr/ctxtEINE-EKORG").Text = Cells(i, 3) '"3000"
+        Session.findById("wnd[0]/usr/ctxtEINE-WERKS").Text = Cells(i, 4) '"30r3"
+        Session.findById("wnd[0]/usr/radRM06I-NORMB").SetFocus
+        Session.findById("wnd[0]").sendVKey 0
+        Session.findById("wnd[0]/tbar[1]/btn[13]").press  'text button
+        Session.findById("wnd[0]/usr/sub:SAPMM06I:0103/txtRM06I-LTEX1[1,11]").SetFocus
+        'session.findById("wnd[0]/usr/sub:SAPMM06I:0103/txtRM06I-LTEX1[1,11]").caretPosition = 3
+        Session.findById("wnd[0]").sendVKey 2   'double click to swith to editor screen
+        SetForegroundWindow hWnd
+        wsh.SendKeys "^a"                     'ctrl + a  to select all text
+        Application.Wait (Now + TimeValue("0:00:003"))
+        Session.findById("wnd[0]/tbar[1]/btn[38]").press  'copy
+        objData.GetFromClipboard
+        strText = objData.GetText()
+        Cells(i, 7) = strText
+        'session.findById("wnd[0]/mbar/menu[1]/menu[4]/menu[0]").Select
+        Session.findById("wnd[0]/tbar[0]/btn[3]").press    'go back
+        Session.findById("wnd[0]/usr/sub:SAPMM06I:0103/txtRM06I-LTEX1[7,11]").SetFocus
+        
+        Session.findById("wnd[0]").sendVKey 2   'double click to swith to editor screen
+        wsh.SendKeys "^a"                     'ctrl + a  to select all text
+        Application.Wait (Now + TimeValue("0:00:003")) '
+        Session.findById("wnd[0]/tbar[1]/btn[38]").press  'copy
+        'Cells(i, 8).PasteSpecial
+        objData.GetFromClipboard
+        strText = objData.GetText()
+        Cells(i, 8) = strText
+    Next i
+End Sub
