@@ -1,0 +1,304 @@
+'' Validate email address
+Public Function ValidateEmailAddress(ByVal strEmailAddress As String) As Boolean
+    Dim objRegExp As Object
+    Dim blnIsValidEmail As Boolean
+    
+    blnIsValidEmail = False
+    Set objRegExp = CreateObject("vbscript.regexp")
+    objRegExp.IgnoreCase = True
+    objRegExp.Global = True
+    objRegExp.Pattern = "^([a-zA-Z0-9_\-\.]+)@[a-z0-9-]+(\.[a-z0-9-]+)*(\.[a-z]{2,3})$"
+    blnIsValidEmail = objRegExp.test(strEmailAddress)
+    ValidateEmailAddress = blnIsValidEmail
+      
+    Exit Function
+
+End Function
+
+Public Sub Split_SendMail()
+
+' MACRO SplitToFiles
+' Last update: 2012-03-04
+' Author: mtone
+' Version 1.1
+' Description:
+' Loops through a specified column, and split each distinct values into a separate file by making a copy and deleting rows below and above
+'
+' Note: Values in the column should be unique or sorted.
+'
+' The following cells are ignored when delimiting sections:
+' - blank cells, or containing spaces only
+' - same value repeated
+' - cells containing "total"
+
+Dim osh As Worksheet ' Original sheet
+Dim iRow As Long ' Cursors
+Dim iCol As Long
+Dim iFirstRow As Long ' Constant
+Dim iTotalRows As Long ' Constant
+Dim iStartRow As Long ' Section delimiters
+Dim iStopRow As Long
+Dim sSectionName As String ' Section name (and filename)
+Dim mail_to As String ' Section name (and filename)
+Dim title As String ' Section name (and filename)
+Dim rCell As Range ' current cell
+Dim owb As Workbook ' Original workbook
+Dim sFilePath As String ' Constant
+Dim iCount As Integer ' # of documents created
+
+iCol = Application.InputBox("Enter the column number used for splitting", "Select column", 1, , , , , 1)
+iRow = Application.InputBox("Enter the starting row number (to skip header)", "Select row", 2, , , , , 1)
+iFirstRow = iRow
+
+Set osh = Application.ActiveSheet
+Set owb = Application.ActiveWorkbook
+iTotalRows = osh.UsedRange.Rows.Count
+sFilePath = Application.ActiveWorkbook.Path
+
+If Dir(sFilePath + "\Split", vbDirectory) = "" Then
+    MkDir sFilePath + "\Split"
+End If
+
+'Turn Off Screen Updating  Events
+Application.EnableEvents = False
+Application.ScreenUpdating = False
+Excel_Last_Row = Sheets("senderlist").UsedRange.Rows.Count
+
+Do
+    ' Get cell at cursor
+    Set rCell = osh.Cells(iRow, iCol)
+    sCell = Replace(rCell.Text, " ", "")
+
+    If sCell = "" Or (rCell.Text = sSectionName And iStartRow <> 0) Or InStr(1, rCell.Text, "total", vbTextCompare) <> 0 Then
+        ' Skip condition met
+    Else
+        ' Found new section
+        If iStartRow = 0 Then
+            ' StartRow delimiter not set, meaning beginning a new section
+            sSectionName = rCell.Text
+            
+            Set found = Sheets("senderlist").Columns("A").Find(What:=sSectionName, LookIn:=xlValues, LookAt:=xlWhole, SearchOrder:=xlByRows, SearchDirection:=xlNext, MatchCase:=False, SearchFormat:=False)
+            If found Is Nothing Then
+                Excel_Last_Row = Excel_Last_Row + 1
+                Sheets("senderlist").Cells(Excel_Last_Row, 1).Value = sSectionName
+                Sheets("senderlist").Cells(Excel_Last_Row, 5).Value = "key not in sender list, skipped"
+                bNeedSend = False
+            ElseIf UCase(Sheets("senderlist").Cells(found.Row, 4).Value) <> "Y" Then
+                Sheets("senderlist").Cells(found.Row, 5).Value = "Key in sender list, no need to send, skipped"
+                bNeedSend = False
+            ElseIf UCase(Sheets("senderlist").Cells(found.Row, 4).Value) = "Y" Then
+                
+                mail_to = Sheets("senderlist").Cells(found.Row, 3).Value
+                If ValidateEmailAddress(mail_to) Then
+                    title = Sheets("senderlist").Cells(found.Row, 2).Value
+                    Sheets("senderlist").Cells(found.Row, 5).Value = "mail sent OK"
+                    bNeedSend = True
+                Else
+                    Sheets("senderlist").Cells(found.Row, 5).Value = "sender mail is not valid, skipped"
+                    bNeedSend = False
+                End If
+            End If
+            iStartRow = iRow
+        Else
+            ' StartRow delimiter set, meaning we reached the end of a section
+            iStopRow = iRow - 1
+
+            ' Pass variables to a separate sub to create and save the new worksheet
+            If bNeedSend = True Then
+                CopySheet osh, iFirstRow, iStartRow, iStopRow, iTotalRows, sFilePath, sSectionName, owb.fileFormat, mail_to, title
+                iCount = iCount + 1
+            End If
+
+            ' Reset section delimiters
+            iStartRow = 0
+            iStopRow = 0
+
+            ' Ready to continue loop
+            iRow = iRow - 1
+        End If
+    End If
+
+    ' Continue until last row is reached
+    If iRow < iTotalRows Then
+            iRow = iRow + 1
+    Else
+        ' Finished. Save the last section
+        iStopRow = iRow
+        If bNeedSend = True Then
+            CopySheet osh, iFirstRow, iStartRow, iStopRow, iTotalRows, sFilePath, sSectionName, owb.fileFormat, mail_to, title
+            iCount = iCount + 1
+        End If
+        ' Exit
+        Exit Do
+    End If
+Loop
+
+'Turn On Screen Updating  Events
+Application.ScreenUpdating = True
+Application.EnableEvents = True
+
+MsgBox Str(iCount) + " worksheets splitted and mail sent accordingly " + sFilePath
+
+
+End Sub
+
+Public Sub DeleteRows(targetSheet As Worksheet, RowFrom As Long, RowTo As Long)
+    Dim rngRange As Range
+    Set rngRange = Range(targetSheet.Cells(RowFrom, 1), targetSheet.Cells(RowTo, 1)).EntireRow
+    rngRange.Select
+    rngRange.Delete
+
+End Sub
+
+
+Public Sub CopySheet(osh As Worksheet, iFirstRow As Long, iStartRow As Long, iStopRow As Long, iTotalRows As Long, sFilePath As String, sSectionName As String, fileFormat As XlFileFormat, mail_to As String, title As String)
+     Dim ash As Worksheet ' Copied sheet
+     Dim awb As Workbook ' New workbook
+     Dim Subject, Body As String
+     
+     'mail_to = Application.WorksheetFunction.VLookup(sSectionName, Sheets("senderlist").Range("A:C"), 3, False)
+     'If ValidateEmailAddress(mail_to) Then
+     'title = Application.WorksheetFunction.VLookup(sSectionName, Sheets("senderlist").Range("A:C"), 2, False)
+     Subject = Sheets("senderlist").Cells(1, 2)
+     Body = Sheets("senderlist").Cells(2, 2)
+     ' Copy book
+     osh.Copy After:=osh.Parent.Sheets(Sheets.Count)
+     Set ash = Application.ActiveSheet
+
+     ' Delete Rows after section
+     If iTotalRows > iStopRow Then
+         DeleteRows ash, iStopRow + 1, iTotalRows
+     End If
+
+     ' Delete Rows before section
+     If iStartRow > iFirstRow Then
+         DeleteRows ash, iFirstRow, iStartRow - 1
+     End If
+     ' Select left-topmost cell
+     ash.Cells(1, 1).Select
+     ' Clean up a few characters to prevent invalid filename
+     sSectionName = Replace(sSectionName, "/", " ")
+     sSectionName = Replace(sSectionName, "\", " ")
+     sSectionName = Replace(sSectionName, ":", " ")
+     sSectionName = Replace(sSectionName, "=", " ")
+     sSectionName = Replace(sSectionName, "*", " ")
+     sSectionName = Replace(sSectionName, ".", " ")
+     sSectionName = Replace(sSectionName, "?", " ")
+     ' Save in same format as original workbook
+     'ash.SaveAs sFilePath + "\Split\" + sSectionName, fileFormat
+     ash.Name = sSectionName + Format(Now(), "yyyyMMdd hhmmss")
+     Mail_ActiveSheet mail_to, title, Subject, Body
+     'End If
+     ' Close
+     'Set awb = ash.Parent
+     'awb.Close SaveChanges:=False
+End Sub
+
+Sub Mail_ActiveSheet(ByVal sMail_to As String, ByVal sTitle As String, ByVal sSubject As String, ByVal sBody As String)
+' Works in Excel 2000, Excel 2002, Excel 2003, Excel 2007, Excel 2010, Outlook 2000, Outlook 2002, Outlook 2003, Outlook 2007, Outlook 2010
+    Dim FileExtStr As String
+    Dim FileFormatNum As Long
+    Dim Sourcewb As Workbook
+    Dim Destwb As Workbook
+    Dim TempFilePath As String
+    Dim TempFileName As String
+    Dim OutApp As Object
+    Dim OutMail As Object
+
+    With Application
+        .ScreenUpdating = False
+        .EnableEvents = False
+    End With
+
+    Set Sourcewb = ActiveWorkbook
+
+    ' Next, copy the sheet to a new workbook.
+    ' You can also use the following line, instead of using the ActiveSheet object,
+   ' if you know the name of the sheet you want to mail :
+    ' Sheets("Sheet5").Copy
+     ' Save the new workbook, mail, and then delete it.
+    TempFilePath = Environ$("temp") & "\"
+    TempFileName = ActiveSheet.Name
+    
+    ActiveSheet.Copy
+    Set Destwb = ActiveWorkbook
+
+    ' Determine the Excel version, and file extension and format.
+    With Destwb
+        If Val(Application.Version) < 12 Then
+            ' For Excel 2000-2003
+            FileExtStr = ".xls": FileFormatNum = -4143
+        Else
+            ' For Excel 2007-2010, exit the subroutine if you answer
+            ' NO in the security dialog that is displayed when you copy
+            ' a sheet from an .xlsm file with macros disabled.
+            If Sourcewb.Name = .Name Then
+                With Application
+                    .ScreenUpdating = True
+                    .EnableEvents = True
+                End With
+                MsgBox "You answered NO in the security dialog."
+                Exit Sub
+            Else
+                Select Case Sourcewb.fileFormat
+                Case 51: FileExtStr = ".xlsx": FileFormatNum = 51
+                Case 52:
+                    If .HasVBProject Then
+                        FileExtStr = ".xlsm": FileFormatNum = 52
+                    Else
+                        FileExtStr = ".xlsx": FileFormatNum = 51
+                    End If
+                Case 56: FileExtStr = ".xls": FileFormatNum = 56
+                Case Else: FileExtStr = ".xlsb": FileFormatNum = 50
+                End Select
+            End If
+        End If
+    End With
+
+    ' You can use the following statements to change all cells in the
+   ' worksheet to values.
+    '    With Destwb.Sheets(1).UsedRange
+    '        .Cells.Copy
+    '        .Cells.PasteSpecial xlPasteValues
+    '        .Cells(1).Select
+    '    End With
+    '    Application.CutCopyMode = False
+
+    Set OutApp = CreateObject("Outlook.Application")
+    
+    Set OutMail = OutApp.CreateItem(0)
+
+    With Destwb
+        .SaveAs TempFilePath & TempFileName & FileExtStr, _
+                fileFormat:=FileFormatNum
+        On Error Resume Next
+       ' Change the mail address and subject in the macro before
+       ' running the procedure.
+        With OutMail
+            .to = sMail_to '"xin_yong.yu@siemens.com"
+            .CC = ""
+            .BCC = ""
+            .Subject = sSubject '"This is the Subject line"
+            .Body = "Dear " & sTitle & ":" & vbCrLf & sBody '"Hello World!"
+            .Attachments.Add Destwb.FullName
+            ' You can add other files by uncommenting the following statement.
+            '.Attachments.Add ("C:\test.txt")
+            ' In place of the following statement, you can use ".Display" to
+            ' display the mail.
+            .send
+        End With
+        On Error GoTo 0
+        .Close SaveChanges:=False
+    End With
+
+    ' Delete the file after sending.
+    Kill TempFilePath & TempFileName & FileExtStr
+
+    Set OutMail = Nothing
+    Set OutApp = Nothing
+
+    With Application
+        .ScreenUpdating = True
+        .EnableEvents = True
+    End With
+End Sub
