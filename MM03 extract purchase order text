@@ -1,0 +1,36 @@
+Sub MM03_extract_PO_long_text()
+    Set SapGuiAuto = GetObject("SAPGUI")  'Get the SAP GUI Scripting object
+    Set SAPApp = SapGuiAuto.GetScriptingEngine 'Get the currently running SAP GUI
+    Set SAPCon = SAPApp.Children(0) 'Get the first system that is currently connected
+    Set session = SAPCon.Children(0) 'Get the first session (window) on that connection
+    For i = 2 To ActiveSheet.UsedRange.Rows.Count
+        If Cells(i, 1) = "" Then Exit For
+        session.findById("wnd[0]").maximize
+        session.findById("wnd[0]/tbar[0]/okcd").Text = "/nmm03"
+        session.findById("wnd[0]").sendVKey 0
+        session.findById("wnd[0]/usr/ctxtRMMG1-MATNR").Text = Cells(i, 1) '"10962014"
+        session.findById("wnd[0]/tbar[1]/btn[5]").press 'select view
+        If session.findById("wnd[0]/sbar").messagetype = "W" Then session.findById("wnd[0]").sendVKey 0
+        session.findById("wnd[1]/tbar[0]/btn[19]").press  'click deselect all default pre-selected views
+        For ii = 0 To 10
+            If session.findById("wnd[1]/usr/tblSAPLMGMMTC_VIEW/txtMSICHTAUSW-DYTXT[0," & CStr(ii) & "]").Text = "Purchase Order Text" Then
+                session.findById("wnd[1]/usr/tblSAPLMGMMTC_VIEW").getAbsoluteRow(ii).Selected = True  'select Purchase Order Text view
+                Exit For
+            End If
+        Next ii
+        If session.findById("wnd[0]/sbar").messagetype = "Select at least one view" Then GoTo next_record
+        session.findById("wnd[1]").sendVKey 0
+        session.findById("wnd[1]/usr/ctxtRMMG1-WERKS").Text = Cells(i, 2) '"30r3"
+        session.findById("wnd[1]").sendVKey 0
+        Cells(i, 3) = session.findById("wnd[0]/usr/tabsTABSPR1/tabpSP11/ssubTABFRA1:SAPLMGMM:2010/subSUB2:SAPLMGD1:2321/cntlLONGTEXT_BESTELL/shellcont/shell").Text
+next_record:
+    Next i
+    
+    If Not SAPApp Is Nothing Then
+        Set session = Nothing
+        Set SAPCon = Nothing
+        Set SAPApp = Nothing
+        Set SapGuiAuto = Nothing
+        MsgBox "Process Completed"
+    End If
+End Sub
