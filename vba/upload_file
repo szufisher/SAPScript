@@ -18,3 +18,9 @@ if (bWindowFound) Then
 	Wshell.sendkeys "%o"	
 	WScript.Sleep 100
 end if
+
+in main script file
+ 'open another script to handle the file select dialog, otherwise it stucks endless
+        Filename = Cells(i, 2)
+        Set Wshell = CreateObject("WScript.Shell")
+        Wshell.Run "d:\sap_upload\upload.vbs " & Filename, 1, False
