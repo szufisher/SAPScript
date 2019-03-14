@@ -1,0 +1,20 @@
+Dim FileNam2
+save_as_window_title ="Save As"
+Set Wshell = CreateObject("WScript.Shell")
+Do 
+	bWindowFound = Wshell.AppActivate(save_as_window_title) 
+	WScript.Sleep 1000
+Loop Until bWindowFound
+
+bWindowFound = Wshell.AppActivate(save_as_window_title) 
+if (bWindowFound) Then
+	Wshell.appActivate save_as_window_title
+	WScript.Sleep 100
+	'Wshell.sendkeys "%n"
+	'WScript.Sleep 100
+	FileNam2 = WScript.Arguments.Item(0)  
+	Wshell.sendkeys FileNam2
+	WScript.Sleep 100
+	Wshell.sendkeys "~"	   'Enter
+	WScript.Sleep 100
+end if
