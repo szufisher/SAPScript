@@ -1,0 +1,20 @@
+Dim FileNam2
+file_dialog_title ="Storing Files in Documents"
+Set Wshell = CreateObject("WScript.Shell")
+Do 
+	bWindowFound = Wshell.AppActivate(file_dialog_title) 
+	WScript.Sleep 1000
+Loop Until bWindowFound
+
+bWindowFound = Wshell.AppActivate(file_dialog_title) 
+if (bWindowFound) Then
+	Wshell.appActivate file_dialog_title
+	WScript.Sleep 100
+	Wshell.sendkeys "%n"
+	WScript.Sleep 100
+	FileNam2 = WScript.Arguments.Item(0)  
+	Wshell.sendkeys FileNam2
+	WScript.Sleep 100
+	Wshell.sendkeys "%o"	
+	WScript.Sleep 100
+end if
