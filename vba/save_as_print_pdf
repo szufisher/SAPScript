@@ -1,0 +1,187 @@
+'--------------------------------------------Start VBA Module-------------------------------------------
+Global found_save_as As Boolean
+Global filename As String
+
+Option Explicit
+
+Private Declare Function FindWindow Lib "user32" Alias "FindWindowA" _
+(ByVal lpClassName As String, ByVal lpWindowName As String) As Long
+
+Private Declare Function FindWindowEx Lib "user32" Alias "FindWindowExA" _
+(ByVal hWnd1 As Long, ByVal hWnd2 As Long, ByVal lpsz1 As String, _
+ByVal lpsz2 As String) As Long
+
+Private Declare Function SendMessage Lib "user32" Alias "SendMessageA" _
+(ByVal hwnd As Long, ByVal wMsg As Long, ByVal wParam As Long, lParam As Any) As Long
+   
+Public Declare Function GetWindow Lib "user32" ( _
+      ByVal hwnd As Long, _
+      ByVal wCmd As Long _
+   ) As Long
+   
+Public Declare Function GetWindowPlacement Lib "user32" _
+    (ByVal hwnd As Long, lpwndpl As WINDOWPLACEMENT) As Long
+    
+Public Declare Function SetWindowPlacement Lib "user32" _
+    (ByVal hwnd As Long, lpwndpl As WINDOWPLACEMENT) As Long
+    
+Public Declare Function SetForegroundWindow Lib "user32" _
+    (ByVal hwnd As Long) As Long
+    
+Public Declare Function BringWindowToTop Lib "user32" _
+    (ByVal hwnd As Long) As Long
+
+Public Declare Function GetForegroundWindow Lib "user32" _
+     () As Long
+
+Const WM_SETTEXT As Long = &HC
+Const BM_CLICK = &HF5
+Const GW_CHILD = 5
+Const GW_HWNDNEXT = 2
+
+Type RECT
+    Left As Long
+    Top As Long
+    Right As Long
+    Bottom As Long
+End Type
+
+Dim Ret As Long, OpenRet As Long, FlDwndHwnd As Long
+Dim ChildRet As Long
+Dim pos As RECT
+
+Const SW_SHOWNORMAL = 1
+Const SW_SHOWMINIMIZED = 2
+
+Public Type POINTAPI
+    X As Long
+    Y As Long
+End Type
+
+Public Type WINDOWPLACEMENT
+    Length As Long
+    flags As Long
+    showCmd As Long
+    ptMinPosition As POINTAPI
+    ptMaxPosition As POINTAPI
+    rcNormalPosition As RECT
+End Type
+
+'==> Use this if you want to specify your own name in the 'Save As'-Dialog
+Const FileSaveAsName = "C:\tmp\Done\MyFile6.xls"
+
+Private Function ActivateWindow(xhWnd&) As Boolean
+    Dim Result&, WndPlcmt As WINDOWPLACEMENT
+  
+    With WndPlcmt
+        .Length = Len(WndPlcmt)
+        Result = GetWindowPlacement(xhWnd, WndPlcmt)
+        If Result Then
+            If .showCmd = SW_SHOWMINIMIZED Then
+                .flags = 0
+                .showCmd = SW_SHOWNORMAL
+                Result = SetWindowPlacement(xhWnd, WndPlcmt)
+              Else
+                Call SetForegroundWindow(xhWnd)
+                Result = BringWindowToTop(xhWnd)
+            End If
+            If Result Then ActivateWindow = True
+        End If
+    End With
+  End Function
+
+Private Function DeActivateWindow(xhWnd&) As Boolean
+    Dim Result&, WndPlcmt As WINDOWPLACEMENT
+  
+    With WndPlcmt
+        .Length = Len(WndPlcmt)
+        Result = GetWindowPlacement(xhWnd, WndPlcmt)
+        If Result Then
+                .flags = 0
+                .showCmd = SW_SHOWMINIMIZED
+                Result = SetWindowPlacement(xhWnd, WndPlcmt)
+                If Result Then DeActivateWindow = True
+        End If
+    End With
+End Function
+
+Sub SendMess(Message As String, hwnd As Long)
+    Call SendMessage(hwnd, WM_SETTEXT, False, ByVal Message)
+End Sub
+
+
+Sub Auto_SaveAs_SAP()
+
+On Error GoTo err_handler
+
+'******************************************************************************************************************
+'*                                                                                                                *
+'* Automatic 'Save as' dialog from SAP => fillin SaveAsFileName and press 'Save'                                  *
+'*                                                                                                                *
+'******************************************************************************************************************
+
+    Ret = FindWindow("#32770", "Save As")
+
+    If Ret = 0 Then
+       'MsgBox "Save As Window Not Found"
+       Exit Sub
+    End If
+        
+    '==> Get the handle of  ComboBoxEx32
+    ChildRet = FindWindowEx(Ret, ByVal 0&, "DUIViewWndClassName", "")
+    If ChildRet = 0 Then
+        'MsgBox "DUIViewWndClassName Not Found"
+        Exit Sub
+    End If
+    
+    ChildRet = FindWindowEx(ChildRet, ByVal 0&, "DirectUIHWND", "")
+    If ChildRet = 0 Then
+        'MsgBox "DirectUIHWND Not Found"
+        Exit Sub
+    End If
+    
+    ChildRet = FindWindowEx(ChildRet, ByVal 0&, "FloatNotifySink", "")
+    If ChildRet = 0 Then
+        'MsgBox "FloatNotifySink Not Found"
+        Exit Sub
+    End If
+
+     '==> Get the handle of the Main ComboBox
+     ChildRet = FindWindowEx(ChildRet, ByVal 0&, "ComboBox", "")
+
+     If ChildRet = 0 Then
+         'MsgBox "ComboBox Window Not Found"
+         Exit Sub
+     End If
+
+     '==> Get the handle of the Edit
+     ChildRet = FindWindowEx(ChildRet, ByVal 0&, "Edit", "")
+
+     If ChildRet = 0 Then
+         'MsgBox "Edit Window Not Found"
+         Exit Sub
+     End If
+     
+     ActivateWindow (Ret)
+     
+     '==> fillin FileName in 'Save As' Edit
+     DoEvents
+     SendMess filename, ChildRet
+     
+     '==> Get the handle of the Save Button in the Save As Dialog Box
+     ChildRet = FindWindowEx(Ret, ByVal 0&, ByVal "Button", ByVal "&Save")
+     'ChildRet = GetWindow(ChildRet, GW_HWNDNEXT) ' This will be handle of '&Save'-Button
+     
+     '==> Check if we found it or not
+     If ChildRet = 0 Then
+         'MsgBox "Save Button in Save As Window Not Found"
+         Exit Sub
+     End If
+     
+     '==> press Save-button
+     SendMessage ChildRet, BM_CLICK, 0, ByVal 0&
+     found_save_as = True
+    Exit Sub
+err_handler:
+    MsgBox Err.Description
+End Sub
