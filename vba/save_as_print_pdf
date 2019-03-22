@@ -1,3 +1,4 @@
+' use winspy++ to check the window hierarchy, parent-child-child..
 '--------------------------------------------Start VBA Module-------------------------------------------
 Global found_save_as As Boolean
 Global filename As String
