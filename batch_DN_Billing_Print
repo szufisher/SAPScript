@@ -1,0 +1,238 @@
+Global session As Object
+Global SAPApp As Object
+Global batch_mode As Boolean
+
+Sub open_sap()
+    If session Is Nothing Then
+        Set SapGuiAuto = GetObject("SAPGUI")  'Get the SAP GUI Scripting object
+        Set SAPApp = SapGuiAuto.GetScriptingEngine 'Get the currently running SAP GUI
+        Set SAPCon = SAPApp.Children(0) 'Get the first system that is currently connected
+        Set session = SAPCon.Children(0) 'Get the first session (window) on that connection
+    End If
+End Sub
+
+Sub close_sap()
+    If Not SAPApp Is Nothing Then
+        Set session = Nothing
+        Set SAPCon = Nothing
+        Set SAPApp = Nothing
+        Set SapGuiAuto = Nothing
+        MsgBox "Process Completed"
+    End If
+End Sub
+
+Sub batch_processing()
+    Call open_sap
+    batch_mode = True
+    Call batch_create_DN
+    Call batch_PGI
+    Call batch_create_billing
+    Call batch_print
+    Call close_sap
+    batch_mode = False
+End Sub
+
+Sub update_sales_order_storage_location()
+    If batch_mode = False Then Call open_sap
+    last_row = ActiveSheet.UsedRange.Rows.Count
+    For i = 2 To last_row
+        If Cells(i, 2) <> "" And Cells(i - 1, 2) <> Cells(i, 2) Then
+            session.findById("wnd[0]/tbar[0]/okcd").Text = "/nva02"
+            session.findById("wnd[0]").sendVKey 0
+            On Error Resume Next
+                session.findById("wnd[1]").Close
+            If session.findById("wnd[0]/sbar").MessageType = "W" Then session.findById("wnd[0]").sendVKey 0
+            session.findById("wnd[0]/usr/ctxtVBAK-VBELN").Text = Cells(i, 2)
+            session.findById("wnd[0]").sendVKey 0
+            sales_order = Cells(i, 2)
+            For j = i To last_row
+                If Cells(j, 2) <> sales_order Then Exit For
+                session.findById("wnd[0]/usr/tabsTAXI_TABSTRIP_OVERVIEW/tabpT\02/ssubSUBSCREEN_BODY:SAPMV45A:4401/subSUBSCREEN_TC:SAPMV45A:4900/subSUBSCREEN_BUTTONS:SAPMV45A:4050/btnBT_POPO").press
+                session.findById("wnd[1]/usr/txtRV45A-POSNR").Text = Cells(j, 3)
+                session.findById("wnd[1]/tbar[0]/btn[0]").press
+                On Error Resume Next
+                    session.findById ("wnd[2]")
+                If Err.Number = 0 Then
+                    session.findById("wnd[2]").Close
+                    Cells(i, 14) = "item not in sales order"
+                Else
+                    session.findById("wnd[0]/usr/tabsTAXI_TABSTRIP_OVERVIEW/tabpT\02/ssubSUBSCREEN_BODY:SAPMV45A:4401/subSUBSCREEN_TC:SAPMV45A:4900/tblSAPMV45ATCTRL_U_ERF_AUFTRAG/txtVBAP-POSNR[0,0]").SetFocus
+                    session.findById("wnd[0]").sendVKey 2
+                    session.findById("wnd[0]/usr/tabsTAXI_TABSTRIP_ITEM/tabpT\03").Select
+                    session.findById("wnd[0]/usr/tabsTAXI_TABSTRIP_ITEM/tabpT\03/ssubSUBSCREEN_BODY:SAPMV45A:4452/ctxtVBAP-LGORT").Text = Cells(j, 6) '"r302"
+                    session.findById("wnd[0]").sendVKey 0
+                    On Error Resume Next  ' auto switch to ATP screen, accept the proposal to partial deliver
+                        session.findById ("wnd[0]/usr/ctxtRV03V-ETDAT")
+                    If Err.Number = 0 Then session.findById("wnd[0]/tbar[1]/btn[7]").press
+                    
+                    session.findById("wnd[0]/tbar[0]/btn[3]").press
+                End If
+            Next j
+            session.findById("wnd[0]/tbar[0]/btn[11]").press
+            On Error Resume Next   'document is incomplete
+                session.findById ("wnd[1]/usr/btnSPOP-VAROPTION1")
+            If Err.Number = 0 Then
+                Cells(i, 15) = session.findById("wnd[1]").PopupDialogText
+                session.findById("wnd[1]/usr/btnSPOP-VAROPTION1").press
+            End If
+        End If
+    Next i
+    If batch_mode = False Then Call close_sap
+End Sub
+
+Sub batch_create_DN()
+    If batch_mode = False Then Call open_sap
+    last_row = ActiveSheet.UsedRange.Rows.Count
+    picking_view_selected = False
+    For i = 2 To last_row
+        If Cells(i, 2) = "" Then Exit For
+        If Cells(i - 1, 2) = Cells(i, 2) Then
+            Cells(i, 10) = Cells(i - 1, 10)   'copy delivery number to following items of the same order
+        Else                                  'only process sales order one time, on the 1st item
+            session.findById("wnd[0]").maximize
+            session.findById("wnd[0]/tbar[0]/okcd").Text = "/nvl01n"
+            session.findById("wnd[0]").sendVKey 0
+            session.findById("wnd[0]/usr/ctxtLIKP-VSTEL").Text = "cn12"
+            session.findById("wnd[0]/usr/ctxtLV50C-DATBI").Text = Cells(i, 9) '"22.03.2022"
+            session.findById("wnd[0]/usr/ctxtLV50C-VBELN").Text = Cells(i, 2)
+            session.findById("wnd[0]").sendVKey 0
+            
+            MessageType = session.findById("wnd[0]/sbar").MessageType
+            If MessageType = "E" Then
+                Cells(i, 11) = session.findById("wnd[0]/sbar").Text
+                GoTo next_record
+            ElseIf MessageType = "W" Then
+                session.findById("wnd[0]").sendVKey 0
+            End If
+            On Error Resume Next
+            session.findById("wnd[1]").Close   'close popup window sales order already has subsequent document
+            session.findById("wnd[0]/mbar/menu[0]/menu[7]").Select  ' click deliver button
+            
+            MessageType = session.findById("wnd[0]/sbar").MessageType
+            If MessageType = "E" Then
+                Cells(i, 11) = session.findById("wnd[0]/sbar").Text
+                GoTo next_record
+            End If
+            
+            Total_items = session.findById("wnd[0]/usr").findByNameEx("SAPMV50ATC_LIPS_PICK", 80).VerticalScrollbar.Maximum + 1  '
+            If Total_items = 0 Then Total_items = 1
+            PageSize = session.findById("wnd[0]/usr").findByNameEx("SAPMV50ATC_LIPS_PICK", 80).VerticalScrollbar.PageSize
+            If picking_view_selected = False Then
+                session.findById("wnd[0]/usr/tabsTAXI_TABSTRIP_OVERVIEW/tabpT\02").Select
+                picking_view_selected = True
+            End If
+            deleted_rows = 0
+            For j = 1 To Total_items
+                pageindex = (j - deleted_rows) Mod PageSize
+                If pageindex = 1 Then
+                    If j > 1 Then session.findById("wnd[0]/tbar[0]/btn[82]").press   ' click the next page button
+                    currentrow = 0
+                Else
+                    currentrow = currentrow + 1
+                End If
+                Set cur_row = session.findById("wnd[0]/usr").findByNameEx("SAPMV50ATC_LIPS_PICK", 80).Rows(currentrow)
+                If cur_row(0).Text = "" Then Exit For
+                item_in_excel = False
+                For k = i To last_row
+                    material = Cells(k, 4)
+                    If cur_row(0).Text = CStr(Cells(k, 3)) And (material = CStr(Cells(k, 4)) Or Right(material, 7) = CStr(Cells(k, 4))) Then
+                        If cur_row(3).Text = "" Then  'storage location
+                            cur_row(3).Text = Cells(i, 5) '"R309"
+                            session.findById("wnd[0]").sendVKey 0
+                            Cells(k, 15) = session.findById("wnd[0]/sbar").Text
+                            If session.findById("wnd[0]/sbar").MessageType = "E" Then Exit For
+                        End If
+                        If cur_row(6).changeable = True Then
+                            cur_row(6).Text = Cells(k, 7)  'pick qty
+                            cur_row(4).Text = Cells(k, 7)  'qty
+                        Else
+                            cur_row(4).Text = Cells(k, 7)  'qty
+                        End If
+                        Cells(k, 8) = Cells(k, 7) 'qty
+                        item_in_excel = True
+                        Exit For
+                    End If
+                    If Cells(k, 2) <> Cells(i, 2) Then Exit For
+                Next k
+                If item_in_excel = False Then
+                    session.findById("wnd[0]/usr").findByNameEx("SAPMV50ATC_LIPS_PICK", 80).getAbsoluteRow(currentrow).Selected = True
+                    session.findById("wnd[0]/usr").findByNameEx("BT_POLO_T", 40).press 'delete
+                    session.findById("wnd[1]/usr/btnSPOP-OPTION1").press  ' confirm delete
+                    currentrow = currentrow - 1
+                    deleted_rows = deleted_rows + 1
+                End If
+            Next j
+            session.findById("wnd[0]/tbar[0]/btn[11]").press  ' Save DN, auto pick in the backend
+            Result = session.findById("wnd[0]/sbar").Text
+            Cells(i, 11) = Result
+            If InStr(Result, "has been saved") > 0 Then Cells(i, 10) = Split(Result, " ")(2)     'extract delivery number from status text "FZ delivery 3333330 has been saved"
+       End If
+next_record:
+    Next i
+    If batch_mode = False Then Call close_sap
+End Sub
+
+Sub batch_PGI()
+    If batch_mode = False Then Call open_sap
+    last_row = ActiveSheet.UsedRange.Rows.Count
+    For i = 2 To last_row
+        If Cells(i, 10) <> "" And Cells(i, 10) <> Cells(i - 1, 10) Then 'process sales order only once
+            session.findById("wnd[0]/tbar[0]/okcd").Text = "/nvl02n"
+            session.findById("wnd[0]").sendVKey 0
+            session.findById("wnd[0]/usr/ctxtLIKP-VBELN").Text = Cells(i, 10) '"223176880"
+            session.findById("wnd[0]/tbar[1]/btn[20]").press    'click Post Goods Issue button
+            Cells(i, 12) = session.findById("wnd[0]/sbar").Text
+        End If
+    Next i
+    If batch_mode = False Then Call close_sap
+End Sub
+
+Sub batch_print()
+    Dim filename As String
+    If batch_mode = False Then Call open_sap
+    last_row = ActiveSheet.UsedRange.Rows.Count
+    For i = 2 To last_row
+        If Cells(i, 10) <> "" And Cells(i, 10) <> Cells(i - 1, 10) Then 'process sales order only once
+            'output to local PDF printer, save the PDF file by delivery_number_PO.pdf
+            session.findById("wnd[0]").maximize
+            session.findById("wnd[0]/tbar[0]/okcd").Text = "/nvl02n"
+            session.findById("wnd[0]").sendVKey 0
+            session.findById("wnd[0]/usr/ctxtLIKP-VBELN").Text = Cells(i, 10) '"223176880"
+            session.findById("wnd[0]").sendVKey 0
+            session.findById("wnd[0]/mbar/menu[3]/menu[1]/menu[0]").Select
+            session.findById("wnd[0]/usr/tblSAPDV70ATC_NAST3").getAbsoluteRow(0).Selected = True
+            session.findById("wnd[0]/tbar[1]/btn[5]").press
+            session.findById("wnd[0]/usr/cmbNAST-VSZTP").Key = "4"
+            session.findById("wnd[0]/tbar[0]/btn[3]").press
+            session.findById("wnd[0]/tbar[0]/btn[11]").press
+            
+            filename = CStr(Cells(i, 10)) & "_" & Cells(i, 1)
+            If Sheets(2).Cells(2, 2) <> "" Then filename = Sheets(2).Cells(2, 2) & filename
+            found_save_as = False
+            For j = 1 To 10  'wait 10 seconds
+                If Module2.Auto_SaveAs_SAP(filename) = "OK" Then Exit For
+                'If found_save_as = True Then Exit For
+                Application.Wait (Now + TimeValue("0:00:01"))
+                Sleep 1000
+            Next j
+            'Set Wshell = CreateObject("WScript.Shell")    'separate vbs sendkeys does not work reliably
+            'Wshell.Run "d:\sap_upload\save_as.vbs " & filename, 1, False
+        End If
+    Next i
+    If batch_mode = False Then Call close_sap
+End Sub
+
+Sub batch_create_billing()
+    If batch_mode = False Then Call open_sap
+    last_row = ActiveSheet.UsedRange.Rows.Count
+    For i = 2 To last_row
+        If Cells(i, 10) <> "" And Cells(i, 10) <> Cells(i - 1, 10) Then 'process sales order only once
+            session.findById("wnd[0]/tbar[0]/okcd").Text = "/nvf01"
+            session.findById("wnd[0]").sendVKey 0
+            session.findById("wnd[0]/usr/tblSAPMV60ATCTRL_ERF_FAKT/ctxtKOMFK-VBELN[0,0]").Text = Cells(i, 10) '"223176880"
+            session.findById("wnd[0]/tbar[0]/btn[11]").press
+            Cells(i, 13) = session.findById("wnd[0]/sbar").Text
+        End If
+    Next i
+    If batch_mode = False Then Call close_sap
+End Sub
