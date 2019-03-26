@@ -20,10 +20,18 @@ Sub close_sap()
         MsgBox "Process Completed"
     End If
 End Sub
-
+Sub clear_previous_status()
+    last_row = ActiveSheet.UsedRange.Rows.Count
+    If last_row > 2 Then
+        Range("I2:O" + CStr(last_row)).Select
+        Selection.ClearContents
+    End If
+    Range("A2").Select
+End Sub
 Sub batch_processing()
     Call open_sap
     batch_mode = True
+    Call clear_previous_status
     Call batch_create_DN
     Call batch_PGI
     Call batch_create_billing
@@ -39,11 +47,11 @@ Sub update_sales_order_storage_location()
         If Cells(i, 2) <> "" And Cells(i - 1, 2) <> Cells(i, 2) Then
             session.findById("wnd[0]/tbar[0]/okcd").Text = "/nva02"
             session.findById("wnd[0]").sendVKey 0
-            On Error Resume Next
-                session.findById("wnd[1]").Close
-            If session.findById("wnd[0]/sbar").MessageType = "W" Then session.findById("wnd[0]").sendVKey 0
             session.findById("wnd[0]/usr/ctxtVBAK-VBELN").Text = Cells(i, 2)
             session.findById("wnd[0]").sendVKey 0
+            On Error Resume Next
+                session.findById("wnd[1]").Close   'close info popup subsequence document exist
+            If session.findById("wnd[0]/sbar").MessageType = "W" Then session.findById("wnd[0]").sendVKey 0
             sales_order = Cells(i, 2)
             For j = i To last_row
                 If Cells(j, 2) <> sales_order Then Exit For
@@ -64,7 +72,6 @@ Sub update_sales_order_storage_location()
                     On Error Resume Next  ' auto switch to ATP screen, accept the proposal to partial deliver
                         session.findById ("wnd[0]/usr/ctxtRV03V-ETDAT")
                     If Err.Number = 0 Then session.findById("wnd[0]/tbar[1]/btn[7]").press
-                    
                     session.findById("wnd[0]/tbar[0]/btn[3]").press
                 End If
             Next j
@@ -82,6 +89,7 @@ End Sub
 
 Sub batch_create_DN()
     If batch_mode = False Then Call open_sap
+    Call clear_previous_status
     last_row = ActiveSheet.UsedRange.Rows.Count
     picking_view_selected = False
     For i = 2 To last_row
@@ -89,12 +97,15 @@ Sub batch_create_DN()
         If Cells(i - 1, 2) = Cells(i, 2) Then
             Cells(i, 10) = Cells(i - 1, 10)   'copy delivery number to following items of the same order
         Else                                  'only process sales order one time, on the 1st item
+            item_count = 0
             session.findById("wnd[0]").maximize
             session.findById("wnd[0]/tbar[0]/okcd").Text = "/nvl01n"
             session.findById("wnd[0]").sendVKey 0
-            session.findById("wnd[0]/usr/ctxtLIKP-VSTEL").Text = "cn12"
-            session.findById("wnd[0]/usr/ctxtLV50C-DATBI").Text = Cells(i, 9) '"22.03.2022"
-            session.findById("wnd[0]/usr/ctxtLV50C-VBELN").Text = Cells(i, 2)
+            If session.findById("wnd[0]/usr/ctxtLIKP-VSTEL").Text = "" Then  'set default shipping point
+                session.findById("wnd[0]/usr/ctxtLIKP-VSTEL").Text = "cn12"
+            End If
+            session.findById("wnd[0]/usr/ctxtLV50C-DATBI").Text = Cells(2, 8) 'Cells(i, 8) 'selection date "22.03.2022"
+            session.findById("wnd[0]/usr/ctxtLV50C-VBELN").Text = Cells(i, 2) 'sales order
             session.findById("wnd[0]").sendVKey 0
             
             MessageType = session.findById("wnd[0]/sbar").MessageType
@@ -104,9 +115,6 @@ Sub batch_create_DN()
             ElseIf MessageType = "W" Then
                 session.findById("wnd[0]").sendVKey 0
             End If
-            On Error Resume Next
-            session.findById("wnd[1]").Close   'close popup window sales order already has subsequent document
-            session.findById("wnd[0]/mbar/menu[0]/menu[7]").Select  ' click deliver button
             
             MessageType = session.findById("wnd[0]/sbar").MessageType
             If MessageType = "E" Then
@@ -134,25 +142,22 @@ Sub batch_create_DN()
                 If cur_row(0).Text = "" Then Exit For
                 item_in_excel = False
                 For k = i To last_row
+                    If Cells(k, 2) <> Cells(i, 2) Then Exit For   'exit after reaching the next sales order
                     material = Cells(k, 4)
                     If cur_row(0).Text = CStr(Cells(k, 3)) And (material = CStr(Cells(k, 4)) Or Right(material, 7) = CStr(Cells(k, 4))) Then
                         If cur_row(3).Text = "" Then  'storage location
-                            cur_row(3).Text = Cells(i, 5) '"R309"
+                            cur_row(3).Text = Cells(i, 6) '"R309"
                             session.findById("wnd[0]").sendVKey 0
                             Cells(k, 15) = session.findById("wnd[0]/sbar").Text
                             If session.findById("wnd[0]/sbar").MessageType = "E" Then Exit For
                         End If
-                        If cur_row(6).changeable = True Then
-                            cur_row(6).Text = Cells(k, 7)  'pick qty
-                            cur_row(4).Text = Cells(k, 7)  'qty
-                        Else
-                            cur_row(4).Text = Cells(k, 7)  'qty
-                        End If
-                        Cells(k, 8) = Cells(k, 7) 'qty
+                        cur_row(4).Text = Cells(k, 7)  'delivery qty
+                        If cur_row(6).changeable = True Then cur_row(6).Text = Cells(k, 7)  'non lean warehouse location, manual input pick qty
+                        Cells(k, 9) = Cells(k, 7) 'mark the excel row as actually delivered,
                         item_in_excel = True
+                        item_count = item_count + 1
                         Exit For
                     End If
-                    If Cells(k, 2) <> Cells(i, 2) Then Exit For
                 Next k
                 If item_in_excel = False Then
                     session.findById("wnd[0]/usr").findByNameEx("SAPMV50ATC_LIPS_PICK", 80).getAbsoluteRow(currentrow).Selected = True
@@ -162,10 +167,18 @@ Sub batch_create_DN()
                     deleted_rows = deleted_rows + 1
                 End If
             Next j
-            session.findById("wnd[0]/tbar[0]/btn[11]").press  ' Save DN, auto pick in the backend
-            Result = session.findById("wnd[0]/sbar").Text
-            Cells(i, 11) = Result
-            If InStr(Result, "has been saved") > 0 Then Cells(i, 10) = Split(Result, " ")(2)     'extract delivery number from status text "FZ delivery 3333330 has been saved"
+            If item_count > 0 Then
+                session.findById("wnd[0]/tbar[0]/btn[11]").press  ' Save DN, auto pick in the backend
+                If session.findById("wnd[0]/sbar").MessageType = "W" Then session.findById("wnd[0]").sendVKey 0
+                Result = session.findById("wnd[0]/sbar").Text
+                Cells(i, 11) = Result
+                If InStr(Result, "has been saved") > 0 Then
+                    array1 = Split(Result, " ")
+                    Cells(i, 10) = array1(UBound(array1) - LBound(array1) - 3)     'extract delivery number from status text "FZ delivery 3333330 has been saved"
+                End If
+            Else
+                Cells(i, 11) = "No DN created due to no valid items!"
+            End If
        End If
 next_record:
     Next i
@@ -181,7 +194,17 @@ Sub batch_PGI()
             session.findById("wnd[0]").sendVKey 0
             session.findById("wnd[0]/usr/ctxtLIKP-VBELN").Text = Cells(i, 10) '"223176880"
             session.findById("wnd[0]/tbar[1]/btn[20]").press    'click Post Goods Issue button
-            Cells(i, 12) = session.findById("wnd[0]/sbar").Text
+            Result = session.findById("wnd[0]/sbar").Text
+            For j = 1 To 10
+                If InStr(1, Result, "processed by another user") > 0 Then   'wait till the previous SAVE finished
+                    Application.Wait (Now + TimeValue("0:00:01"))
+                    session.findById("wnd[0]/tbar[1]/btn[20]").press    'click Post Goods Issue button
+                    Result = session.findById("wnd[0]/sbar").Text
+                Else
+                    Exit For
+                End If
+            Next j
+            Cells(i, 12) = Result
         End If
     Next i
     If batch_mode = False Then Call close_sap
@@ -191,9 +214,8 @@ Sub batch_print()
     Dim filename As String
     If batch_mode = False Then Call open_sap
     last_row = ActiveSheet.UsedRange.Rows.Count
-    For i = 2 To last_row
+    For i = 2 To last_row   'output to local PDF printer, save the PDF file by delivery_number_PO.pdf
         If Cells(i, 10) <> "" And Cells(i, 10) <> Cells(i - 1, 10) Then 'process sales order only once
-            'output to local PDF printer, save the PDF file by delivery_number_PO.pdf
             session.findById("wnd[0]").maximize
             session.findById("wnd[0]/tbar[0]/okcd").Text = "/nvl02n"
             session.findById("wnd[0]").sendVKey 0
@@ -205,18 +227,13 @@ Sub batch_print()
             session.findById("wnd[0]/usr/cmbNAST-VSZTP").Key = "4"
             session.findById("wnd[0]/tbar[0]/btn[3]").press
             session.findById("wnd[0]/tbar[0]/btn[11]").press
-            
             filename = CStr(Cells(i, 10)) & "_" & Cells(i, 1)
             If Sheets(2).Cells(2, 2) <> "" Then filename = Sheets(2).Cells(2, 2) & filename
-            found_save_as = False
             For j = 1 To 10  'wait 10 seconds
                 If Module2.Auto_SaveAs_SAP(filename) = "OK" Then Exit For
-                'If found_save_as = True Then Exit For
                 Application.Wait (Now + TimeValue("0:00:01"))
                 Sleep 1000
             Next j
-            'Set Wshell = CreateObject("WScript.Shell")    'separate vbs sendkeys does not work reliably
-            'Wshell.Run "d:\sap_upload\save_as.vbs " & filename, 1, False
         End If
     Next i
     If batch_mode = False Then Call close_sap
@@ -236,194 +253,3 @@ Sub batch_create_billing()
     Next i
     If batch_mode = False Then Call close_sap
 End Sub
-
-'Module 2
-Global found_save_as As Boolean
-
-
-Option Explicit
-
-Public Declare PtrSafe Sub Sleep Lib "kernel32" (ByVal dwMilliseconds As LongPtr)
-
-Private Declare Function FindWindow Lib "user32" Alias "FindWindowA" _
-(ByVal lpClassName As String, ByVal lpWindowName As String) As Long
-
-Private Declare Function FindWindowEx Lib "user32" Alias "FindWindowExA" _
-(ByVal hWnd1 As Long, ByVal hWnd2 As Long, ByVal lpsz1 As String, _
-ByVal lpsz2 As String) As Long
-
-Private Declare Function SendMessage Lib "user32" Alias "SendMessageA" _
-(ByVal hwnd As Long, ByVal wMsg As Long, ByVal wParam As Long, lParam As Any) As Long
-   
-Public Declare Function GetWindow Lib "user32" ( _
-      ByVal hwnd As Long, _
-      ByVal wCmd As Long _
-   ) As Long
-   
-Public Declare Function GetWindowPlacement Lib "user32" _
-    (ByVal hwnd As Long, lpwndpl As WINDOWPLACEMENT) As Long
-    
-Public Declare Function SetWindowPlacement Lib "user32" _
-    (ByVal hwnd As Long, lpwndpl As WINDOWPLACEMENT) As Long
-    
-Public Declare Function SetForegroundWindow Lib "user32" _
-    (ByVal hwnd As Long) As Long
-    
-Public Declare Function BringWindowToTop Lib "user32" _
-    (ByVal hwnd As Long) As Long
-
-Public Declare Function GetForegroundWindow Lib "user32" _
-     () As Long
-
-Const WM_SETTEXT As Long = &HC
-Const BM_CLICK = &HF5
-Const GW_CHILD = 5
-Const GW_HWNDNEXT = 2
-
-Type RECT
-    Left As Long
-    Top As Long
-    Right As Long
-    Bottom As Long
-End Type
-
-Dim Ret As Long, OpenRet As Long, FlDwndHwnd As Long
-Dim ChildRet As Long
-Dim pos As RECT
-
-Const SW_SHOWNORMAL = 1
-Const SW_SHOWMINIMIZED = 2
-
-Public Type POINTAPI
-    X As Long
-    Y As Long
-End Type
-
-Public Type WINDOWPLACEMENT
-    Length As Long
-    flags As Long
-    showCmd As Long
-    ptMinPosition As POINTAPI
-    ptMaxPosition As POINTAPI
-    rcNormalPosition As RECT
-End Type
-
-'==> Use this if you want to specify your own name in the 'Save As'-Dialog
-Const FileSaveAsName = "C:\tmp\Done\MyFile6.xls"
-
-Private Function ActivateWindow(xhWnd&) As Boolean
-    Dim Result&, WndPlcmt As WINDOWPLACEMENT
-  
-    With WndPlcmt
-        .Length = Len(WndPlcmt)
-        Result = GetWindowPlacement(xhWnd, WndPlcmt)
-        If Result Then
-            If .showCmd = SW_SHOWMINIMIZED Then
-                .flags = 0
-                .showCmd = SW_SHOWNORMAL
-                Result = SetWindowPlacement(xhWnd, WndPlcmt)
-              Else
-                Call SetForegroundWindow(xhWnd)
-                Result = BringWindowToTop(xhWnd)
-            End If
-            If Result Then ActivateWindow = True
-        End If
-    End With
-  End Function
-
-Private Function DeActivateWindow(xhWnd&) As Boolean
-    Dim Result&, WndPlcmt As WINDOWPLACEMENT
-  
-    With WndPlcmt
-        .Length = Len(WndPlcmt)
-        Result = GetWindowPlacement(xhWnd, WndPlcmt)
-        If Result Then
-                .flags = 0
-                .showCmd = SW_SHOWMINIMIZED
-                Result = SetWindowPlacement(xhWnd, WndPlcmt)
-                If Result Then DeActivateWindow = True
-        End If
-    End With
-End Function
-
-Sub SendMess(Message As String, hwnd As Long)
-    Call SendMessage(hwnd, WM_SETTEXT, False, ByVal Message)
-End Sub
-
-
-Function Auto_SaveAs_SAP(filename As String)
-
-On Error GoTo err_handler
-
-'******************************************************************************************************************
-'*                                                                                                                *
-'* Automatic 'Save as' dialog from SAP => fillin SaveAsFileName and press 'Save'                                  *
-'*                                                                                                                *
-'******************************************************************************************************************
-
-    Ret = FindWindow("#32770", "Save As")
-
-    If Ret = 0 Then
-       'MsgBox "Save As Window Not Found"
-       Exit Function
-    End If
-        
-    '==> Get the handle of  ComboBoxEx32
-    ChildRet = FindWindowEx(Ret, ByVal 0&, "DUIViewWndClassName", "")
-    If ChildRet = 0 Then
-        'MsgBox "DUIViewWndClassName Not Found"
-        Exit Function
-    End If
-    
-    ChildRet = FindWindowEx(ChildRet, ByVal 0&, "DirectUIHWND", "")
-    If ChildRet = 0 Then
-        'MsgBox "DirectUIHWND Not Found"
-        Exit Function
-    End If
-    
-    ChildRet = FindWindowEx(ChildRet, ByVal 0&, "FloatNotifySink", "")
-    If ChildRet = 0 Then
-        'MsgBox "FloatNotifySink Not Found"
-        Exit Function
-    End If
-
-     '==> Get the handle of the Main ComboBox
-     ChildRet = FindWindowEx(ChildRet, ByVal 0&, "ComboBox", "")
-
-     If ChildRet = 0 Then
-         'MsgBox "ComboBox Window Not Found"
-         Exit Function
-     End If
-
-     '==> Get the handle of the Edit
-     ChildRet = FindWindowEx(ChildRet, ByVal 0&, "Edit", "")
-
-     If ChildRet = 0 Then
-         'MsgBox "Edit Window Not Found"
-         Exit Function
-     End If
-     
-     ActivateWindow (Ret)
-     
-     '==> fillin FileName in 'Save As' Edit
-     DoEvents
-     SendMess filename, ChildRet
-     
-     '==> Get the handle of the Save Button in the Save As Dialog Box
-     ChildRet = FindWindowEx(Ret, ByVal 0&, ByVal "Button", ByVal "&Save")
-     'ChildRet = GetWindow(ChildRet, GW_HWNDNEXT) ' This will be handle of '&Save'-Button
-     
-     '==> Check if we found it or not
-     If ChildRet = 0 Then
-         'MsgBox "Save Button in Save As Window Not Found"
-         Exit Function
-     End If
-     
-     '==> press Save-button
-     SendMessage ChildRet, BM_CLICK, 0, ByVal 0&
-     found_save_as = True
-     Auto_SaveAs_SAP = "OK"
-    Exit Function
-err_handler:
-    MsgBox Err.Description
-End Function
