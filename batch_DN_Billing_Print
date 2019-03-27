@@ -121,7 +121,7 @@ Sub batch_create_DN()
                 Cells(i, 11) = session.findById("wnd[0]/sbar").Text
                 GoTo next_record
             End If
-            
+            session.findById("wnd[0]/usr/tabsTAXI_TABSTRIP_OVERVIEW/tabpT\02").Select 'select picking tab
             Total_items = session.findById("wnd[0]/usr").findByNameEx("SAPMV50ATC_LIPS_PICK", 80).VerticalScrollbar.Maximum + 1  '
             If Total_items = 0 Then Total_items = 1
             PageSize = session.findById("wnd[0]/usr").findByNameEx("SAPMV50ATC_LIPS_PICK", 80).VerticalScrollbar.PageSize
@@ -402,3 +402,4 @@ Sub allocate_qty()
     Application.ScreenUpdating = True
     Call close_sap
 End Sub
+
