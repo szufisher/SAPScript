@@ -211,7 +211,7 @@ Sub batch_PGI()
 End Sub
 
 Sub batch_print()
-    Dim filename As String
+    Dim Filename As String
     If batch_mode = False Then Call open_sap
     last_row = ActiveSheet.UsedRange.Rows.Count
     For i = 2 To last_row   'output to local PDF printer, save the PDF file by delivery_number_PO.pdf
@@ -227,10 +227,10 @@ Sub batch_print()
             session.findById("wnd[0]/usr/cmbNAST-VSZTP").Key = "4"
             session.findById("wnd[0]/tbar[0]/btn[3]").press
             session.findById("wnd[0]/tbar[0]/btn[11]").press
-            filename = CStr(Cells(i, 10)) & "_" & Cells(i, 1)
-            If Sheets(2).Cells(2, 2) <> "" Then filename = Sheets(2).Cells(2, 2) & filename
+            Filename = CStr(Cells(i, 10)) & "_" & Cells(i, 1)
+            If Sheets(2).Cells(2, 2) <> "" Then Filename = Sheets(2).Cells(2, 2) & Filename
             For j = 1 To 10  'wait 10 seconds
-                If Module2.Auto_SaveAs_SAP(filename) = "OK" Then Exit For
+                If Module2.Auto_SaveAs_SAP(Filename) = "OK" Then Exit For
                 Application.Wait (Now + TimeValue("0:00:01"))
                 Sleep 1000
             Next j
@@ -252,4 +252,153 @@ Sub batch_create_billing()
         End If
     Next i
     If batch_mode = False Then Call close_sap
+End Sub
+
+Sub allocate_material()
+    Sheets("template").Activate
+    last_row = Sheets("template").UsedRange.Rows.Count
+    For j = 2 To last_row   'initialize allocated qty as 0
+        Sheets("template").Cells(j, 7) = 0
+    Next j
+    
+    For i = 2 To Sheets("MB52").UsedRange.Rows.Count
+        material = Sheets("MB52").Cells(i, 1)
+        If Left(material, 1) = "0" Then
+            material_7 = Right(material, 7)
+        Else
+            material_7 = material
+        End If
+        Location = Sheets("MB52").Cells(i, 2)
+        available_qty = Sheets("MB52").Cells(i, 3)
+        allocated_qty = 0
+        balance = available_qty
+        For j = 2 To last_row
+            If Sheets("MB52").Cells(i, 3) - allocated_qty <= 0 Then Exit For
+            required_allocate_qty = Sheets("template").Cells(j, 5) - Sheets("template").Cells(j, 7)
+            If (Sheets("template").Cells(j, 4).Text = material Or Sheets("template").Cells(j, 4).Text = material_7) _
+                And Sheets("template").Cells(j, 6).Text = Location And required_allocate_qty > 0 Then
+                If balance < required_allocate_qty Then required_allocate_qty = balance
+                Sheets("template").Cells(j, 7) = Sheets("template").Cells(j, 7) + required_allocate_qty
+                allocated_qty = allocated_qty + required_allocate_qty
+                balance = available_qty - allocated_qty
+            End If
+        Next j
+        Sheets("MB52").Cells(i, 4) = allocated_qty
+        Sheets("MB52").Cells(i, 5) = available_qty - allocated_qty
+    Next i
+End Sub
+
+Sub download_mb52()
+    Dim wbk As Workbook
+    Dim wbk1 As Workbook
+    Dim Filename As String
+    Dim Path As String
+    'initialize
+    Set wbk1 = ThisWorkbook
+    Set sht_mb52 = wbk1.Sheets("MB52")
+    sht_mb52.UsedRange.ClearContents
+    sht_mb52.Cells(1, 1) = "Material"
+    sht_mb52.Cells(1, 2) = "Storage Location"
+    sht_mb52.Cells(1, 3) = "Unrestricted"
+    sht_mb52.Cells(1, 4) = "Allocated"
+    sht_mb52.Cells(1, 5) = "Balance"
+        
+    Sheets("template").Activate
+    last_row = ActiveSheet.UsedRange.Rows.Count
+    Range("D2:D" + CStr(last_row)).Select
+    Selection.Copy
+    
+    If batch_mode = False Then Call open_sap
+    session.findById("wnd[0]").maximize
+    session.findById("wnd[0]/tbar[0]/okcd").Text = "/nmb52"
+    session.findById("wnd[0]").sendVKey 0
+    
+    Range("G2:G" + CStr(last_row)).Select   'material
+    Selection = 0
+    session.findById("wnd[0]/usr/btn%_MATNR_%_APP_%-VALU_PUSH").press
+    session.findById("wnd[1]/tbar[0]/btn[16]").press   'delete previous input
+    session.findById("wnd[1]/tbar[0]/btn[24]").press
+    session.findById("wnd[1]/tbar[0]/btn[8]").press
+    
+    session.findById("wnd[0]/usr/ctxtWERKS-LOW").Text = "30r3"
+    
+    Range("F2:F" + CStr(last_row)).Select   'storage location
+    Selection.Copy
+    session.findById("wnd[0]/usr/btn%_LGORT_%_APP_%-VALU_PUSH").press
+    session.findById("wnd[1]/tbar[0]/btn[16]").press   'delete previous input
+    session.findById("wnd[1]/tbar[0]/btn[24]").press
+    session.findById("wnd[1]/tbar[0]/btn[8]").press
+    
+    session.findById("wnd[0]/usr/chkNOZERO").Selected = True
+    session.findById("wnd[0]/usr/chkNOVALUES").Selected = True
+    'session.findById("wnd[0]/usr/ctxtP_VARI").SetFocus
+    
+    session.findById("wnd[0]/tbar[1]/btn[8]").press
+    
+    session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell").selectedRows = "0"
+    session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell").contextMenu
+    session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell").selectContextMenuItem "&XXL"
+    session.findById("wnd[1]/usr/radRB_OTHERS").Select
+    session.findById("wnd[1]/usr/cmbG_LISTBOX").Key = "10"
+    session.findById("wnd[1]/tbar[0]/btn[0]").press
+    Path = Sheets(2).Cells(2, 2) '"D:\test\"
+    Filename = "MB52" & "_" & Replace(CStr(CDbl(Now())), ".", "") & ".xlsx"
+    For ii = 1 To 10
+        On Error Resume Next
+            session.findById("wnd[1]/usr/ctxtDY_PATH").Text = Path '"d:\sap_upload\"
+            session.findById("wnd[1]/usr/ctxtDY_FILENAME").Text = Filename  '"book1.xlsx"
+        If Err.Number <> 0 Then
+            Application.Wait (Now + TimeValue("0:00:01"))
+        Else
+            Exit For
+        End If
+    Next ii
+    session.findById("wnd[1]/tbar[0]/btn[0]").press
+    On Error Resume Next
+        Set wbk = GetObject(Path & Filename)
+    On Error GoTo 0
+    'if it's not already opened - open it
+    If wbk Is Nothing Then Set wbk = Workbooks.Open(Path & Filename)
+    Set sht = wbk.Sheets(1)
+    'extract the unrestricted stock quantity only
+    last_col = sht.UsedRange.Columns.Count
+    last_row = sht.UsedRange.Rows.Count
+    col_count = 0
+    For i = 1 To last_col
+        If sht.Cells(1, i).Text = "Material" Then
+            col_material = i
+            col_count = col_count + 1
+        ElseIf sht.Cells(1, i).Text = "Storage Location" Then
+            col_location = i
+            col_count = col_count + 1
+        ElseIf sht.Cells(1, i).Text = "Unrestricted" Then
+            col_available_qty = i
+            col_count = col_count + 1
+        End If
+        If col_count >= 3 Then Exit For
+    Next i
+    If col_count < 3 Then
+        MsgBox "MB52 layout should include at least 3 mandatory fields: material, storage location, unrestricted"
+        Exit Sub
+    End If
+    For j = 2 To last_row
+        sht_mb52.Cells(j, 1) = sht.Cells(j, col_material)
+        sht_mb52.Cells(j, 2) = sht.Cells(j, col_location)
+        sht_mb52.Cells(j, 3) = sht.Cells(j, col_available_qty)
+    Next j
+    wbk.Close savechanges:=False
+    wbk1.Activate
+    If batch_mode = False Then Call close_sap
+End Sub
+
+Sub allocate_qty()
+    Application.ScreenUpdating = False
+    Application.DisplayAlerts = False
+    batch_mode = True
+    Call open_sap
+    Call download_mb52
+    Call allocate_material
+    Application.DisplayAlerts = True
+    Application.ScreenUpdating = True
+    Call close_sap
 End Sub
