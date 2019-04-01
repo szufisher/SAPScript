@@ -1,0 +1,164 @@
+'this version does not format the table well, use SendMail instead
+Sub send_mail()
+    Dim sMail_to As String
+    Dim sSubject As String
+    Dim sBody As String
+    last_row = ActiveSheet.UsedRange.Rows.Count
+    sBody = "Material" & vbTab & "Desc" & vbTab & "MRP Controller" & vbTab & "Short Qty"
+    For i = 2 To last_row
+        If Cells(i, 24) > 0 Then
+            sLine = Cells(i, 1).Text & vbTab & Cells(i, 2).Text & vbTab & Cells(i, 13).Text & vbTab & _
+                    Cells(i, 24).Text
+            sBody = sBody & vbCrLf & sLine
+            If InStr(1, sMail_to, Cells(i, 13)) = 0 Then
+                If sMail_to = "" Then
+                    sMail_to = Cells(i, 13)
+                Else
+                    sMail_to = sMail_to & ";" & Cells(i, 13).Text
+                End If
+            End If
+        End If
+    Next i
+    sSubject = "Kanban Short Qty Reminder"
+    If sMail_to <> "" Then
+         Set OutApp = CreateObject("Outlook.Application")
+         Set OutMail = OutApp.CreateItem(0)
+        
+          On Error Resume Next
+         ' Change the mail address and subject in the macro before running the procedure.
+          With OutMail
+              .To = sMail_to '"xin_yong.yu@siemens.com"
+              .CC = ""
+              .BCC = ""
+              .Subject = sSubject '"This is the Subject line"
+              .Body = "Dear " & sTitle & ":" & vbCrLf & sBody '"Hello World!"
+              .Attachments.Add Destwb.FullName
+              ' You can add other files by uncommenting the following statement.
+              '.Attachments.Add ("C:\test.txt")
+              ' In place of the following statement, you can use ".Display" to
+              ' display the mail.
+              .Send
+          End With
+         Set OutMail = Nothing
+         Set OutApp = Nothing
+    End If
+End Sub
+
+Sub SendEmail()
+    Dim ws As Worksheet
+    Dim sMail_to As String
+    Dim SendingRng As Range
+    
+    Set ws = Nothing
+    
+    On Error Resume Next
+        Set ws = Sheets("mail_template")
+    If Err.Number = 0 Then
+        ws.UsedRange.ClearContents
+    Else
+        Set ws = Sheets.Add(After:=Sheets(Sheets.Count))
+        ws.Name = "mail_template"
+    End If
+    'ws.Select
+    ws.Cells(1, 1) = "Material"
+    ws.Cells(1, 2) = "Description"
+    ws.Cells(1, 3) = "MRP Controller"
+    ws.Cells(1, 4) = "Short Qty"
+    i = 2
+    For j = 2 To Sheets("KANBAN").UsedRange.Rows.Count
+        If Sheets("KANBAN").Cells(j, 24) > 0 Then
+            ws.Cells(i, 1) = Sheets("KANBAN").Cells(j, 1)
+            ws.Cells(i, 2) = Sheets("KANBAN").Cells(j, 2)
+            ws.Cells(i, 3) = Sheets("KANBAN").Cells(j, 13)
+            ws.Cells(i, 4) = Sheets("KANBAN").Cells(j, 24)
+            i = i + 1
+            If InStr(1, sMail_to, Sheets("KANBAN").Cells(i, 13)) = 0 Then
+                If sMail_to = "" Then
+                    sMail_to = Sheets("KANBAN").Cells(i, 13)
+                Else
+                    sMail_to = sMail_to & ";" & Sheets("KANBAN").Cells(i, 13).Text
+                End If
+            End If
+        End If
+    Next j
+    If i = 2 Then Exit Sub   ' no mail need to be sent
+    On Error GoTo StopMacro
+    With Application
+        .ScreenUpdating = False
+        .EnableEvents = False
+    End With
+    ws.Select
+    Call add_frame
+    ws.Range("A:D").EntireColumn.AutoFit
+    Set SendingRng = ws.Range("A1:d" & ActiveSheet.UsedRange.Rows.Count)
+    With SendingRng
+        .Parent.Select
+        .Select
+        ' Create the mail and send it
+        ActiveWorkbook.EnvelopeVisible = True
+        With .Parent.MailEnvelope
+            .Introduction = "Please follow up and make sure the below material available ASAP."
+            With .Item
+                .To = sMail_to '"xin_yong.yu@siemens-healthineers.com"
+                .CC = ""
+                .BCC = ""
+                .Subject = "Kanban material short quantity reminder"
+                .Send
+            End With
+        End With
+    End With
+StopMacro:
+    With Application
+        .ScreenUpdating = True
+        .EnableEvents = True
+    End With
+    ActiveWorkbook.EnvelopeVisible = False
+    Sheets("KANBAN").Select
+End Sub
+
+Sub add_frame()
+'
+' add_frame Macro
+'
+    lastrow = ActiveSheet.UsedRange.Rows.Count
+    Range("A1:D" & lastrow).Select
+    Selection.Borders(xlDiagonalDown).LineStyle = xlNone
+    Selection.Borders(xlDiagonalUp).LineStyle = xlNone
+    With Selection.Borders(xlEdgeLeft)
+        .LineStyle = xlContinuous
+        .ColorIndex = 0
+        .TintAndShade = 0
+        .Weight = xlThin
+    End With
+    With Selection.Borders(xlEdgeTop)
+        .LineStyle = xlContinuous
+        .ColorIndex = 0
+        .TintAndShade = 0
+        .Weight = xlThin
+    End With
+    With Selection.Borders(xlEdgeBottom)
+        .LineStyle = xlContinuous
+        .ColorIndex = 0
+        .TintAndShade = 0
+        .Weight = xlThin
+    End With
+    With Selection.Borders(xlEdgeRight)
+        .LineStyle = xlContinuous
+        .ColorIndex = 0
+        .TintAndShade = 0
+        .Weight = xlThin
+    End With
+    With Selection.Borders(xlInsideVertical)
+        .LineStyle = xlContinuous
+        .ColorIndex = 0
+        .TintAndShade = 0
+        .Weight = xlThin
+    End With
+    With Selection.Borders(xlInsideHorizontal)
+        .LineStyle = xlContinuous
+        .ColorIndex = 0
+        .TintAndShade = 0
+        .Weight = xlThin
+    End With
+    Range("a1").Select
+End Sub
