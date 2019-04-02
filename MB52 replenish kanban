@@ -1,0 +1,260 @@
+Global session As Object
+Global SAPApp As Object
+
+Sub open_sap()
+    If session Is Nothing Then
+        Set SapGuiAuto = GetObject("SAPGUI")  'Get the SAP GUI Scripting object
+        Set SAPApp = SapGuiAuto.GetScriptingEngine 'Get the currently running SAP GUI
+        Set SAPCon = SAPApp.Children(0) 'Get the first system that is currently connected
+        Set session = SAPCon.Children(0) 'Get the first session (window) on that connection
+    End If
+End Sub
+
+Sub close_sap()
+    If Not SAPApp Is Nothing Then
+        Set session = Nothing
+        Set SAPCon = Nothing
+        Set SAPApp = Nothing
+        Set SapGuiAuto = Nothing
+        MsgBox "Process Completed"
+    End If
+End Sub
+
+Sub kanban_process()
+    Dim wbk As Workbook
+    Dim wbk1 As Workbook
+    Dim Filename As String
+    Dim Path As String
+    Application.ScreenUpdating = False
+    Application.DisplayAlerts = False
+    'initialize
+    Set wbk1 = ThisWorkbook
+    Set sht_kanban = wbk1.Sheets("KANBAN")
+    last_row_kanban = sht_kanban.UsedRange.Rows.Count
+    For i = 2 To last_row_kanban
+        sht_kanban.Cells(i, 19) = 0   'productionline
+        sht_kanban.Cells(i, 20) = 0   'mainstock
+        sht_kanban.Cells(i, 24) = 0   'short qty
+    Next i
+    
+    Call open_sap
+    session.findById("wnd[0]").maximize
+    session.findById("wnd[0]/tbar[0]/okcd").Text = "/nmb52"
+    session.findById("wnd[0]").sendVKey 0
+    
+    Range("A2:A" + CStr(last_row_kanban)).Select   'material
+    Selection.Copy
+    session.findById("wnd[0]/usr/btn%_MATNR_%_APP_%-VALU_PUSH").press
+    session.findById("wnd[1]/tbar[0]/btn[16]").press   'delete previous input
+    session.findById("wnd[1]/tbar[0]/btn[24]").press
+    session.findById("wnd[1]/tbar[0]/btn[8]").press
+    session.findById("wnd[0]/usr/ctxtWERKS-LOW").Text = "30r1"
+    'Range("F2:F" + CStr(last_row)).Select   'storage location
+    'Selection.Copy
+    session.findById("wnd[0]/usr/btn%_LGORT_%_APP_%-VALU_PUSH").press
+    session.findById("wnd[1]/tbar[0]/btn[16]").press   'delete previous input
+    session.findById("wnd[1]/usr/tabsTAB_STRIP/tabpSIVA/ssubSCREEN_HEADER:SAPLALDB:3010/tblSAPLALDBSINGLE/ctxtRSCSEL_255-SLOW_I[1,0]").Text = "R001"
+    session.findById("wnd[1]/usr/tabsTAB_STRIP/tabpSIVA/ssubSCREEN_HEADER:SAPLALDB:3010/tblSAPLALDBSINGLE/ctxtRSCSEL_255-SLOW_I[1,1]").Text = "R023"
+    'session.findById("wnd[1]/tbar[0]/btn[24]").press
+    session.findById("wnd[1]/tbar[0]/btn[8]").press
+    
+    session.findById("wnd[0]/usr/chkPA_SOND").Selected = False   'no special stock
+    session.findById("wnd[0]/usr/chkNOZERO").Selected = True
+    session.findById("wnd[0]/usr/chkNOVALUES").Selected = True
+    'session.findById("wnd[0]/usr/ctxtP_VARI").SetFocus
+    session.findById("wnd[0]/tbar[1]/btn[8]").press
+    
+    session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell").selectedRows = "0"
+    session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell").contextMenu
+    session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell").selectContextMenuItem "&XXL"
+    session.findById("wnd[1]/usr/radRB_OTHERS").Select
+    session.findById("wnd[1]/usr/cmbG_LISTBOX").Key = "10"
+    session.findById("wnd[1]/tbar[0]/btn[0]").press
+    'Path = Sheets(2).Cells(2, 2) '"D:\test\"
+    Filename = "MB52" & "_" & Replace(CStr(CDbl(Now())), ".", "") & ".xlsx"
+    For ii = 1 To 10
+        On Error Resume Next
+            Path = session.findById("wnd[1]/usr/ctxtDY_PATH").Text   '"d:\sap_upload\"
+            session.findById("wnd[1]/usr/ctxtDY_FILENAME").Text = Filename  '"book1.xlsx"
+        If Err.Number <> 0 Then
+            Application.Wait (Now + TimeValue("0:00:01"))
+        Else
+            Exit For
+        End If
+    Next ii
+    session.findById("wnd[1]/tbar[0]/btn[0]").press
+    On Error Resume Next
+        Set wbk = GetObject(Path & Filename)
+    On Error GoTo 0
+    'if it's not already opened - open it
+    If wbk Is Nothing Then Set wbk = Workbooks.Open(Path & Filename)
+    Set sht = wbk.Sheets(1)
+   
+    last_col = sht.UsedRange.Columns.Count  'extract the unrestricted stock quantity only
+    last_row = sht.UsedRange.Rows.Count
+    col_count = 0
+    For i = 1 To last_col
+        If sht.Cells(1, i).Text = "Material" Then
+            col_material = i
+            col_count = col_count + 1
+        ElseIf sht.Cells(1, i).Text = "Storage Location" Then
+            col_location = i
+            col_count = col_count + 1
+        ElseIf sht.Cells(1, i).Text = "Unrestricted" Then
+            col_available_qty = i
+            col_count = col_count + 1
+        End If
+        If col_count >= 3 Then Exit For
+    Next i
+    If col_count < 3 Then
+        MsgBox "the default MB52 layout should include at least 3 mandatory fields: material,storage location, unrestricted"
+        Exit Sub
+    End If
+    
+    For j = 2 To last_row
+        For k = 2 To last_row_kanban
+            If sht_kanban.Cells(k, 1).Text = sht.Cells(j, col_material).Text Then
+                If sht_kanban.Cells(k, 11).Text = sht.Cells(j, col_location).Text Then
+                    sht_kanban.Cells(k, 19) = sht.Cells(j, col_available_qty)
+                    Exit For
+                ElseIf sht_kanban.Cells(k, 12).Text = sht.Cells(j, col_location).Text Then
+                    sht_kanban.Cells(k, 20) = sht.Cells(j, col_available_qty)
+                    Exit For
+                End If
+            End If
+        Next k
+    Next j
+    For k = 2 To last_row_kanban
+        If sht_kanban.Cells(k, 19) < sht_kanban.Cells(k, 14) Then
+            replenish_qty = sht_kanban.Cells(k, 15) - sht_kanban.Cells(k, 19)
+            If sht_kanban.Cells(k, 20) < replenish_qty Then
+                replenish_qty = sht_kanban.Cells(k, 20)
+                sht_kanban.Cells(k, 24) = sht_kanban.Cells(k, 15) - replenish_qty - sht_kanban.Cells(k, 19)
+            End If
+            sht_kanban.Cells(k, 22) = replenish_qty
+        Else
+            sht_kanban.Cells(k, 22) = 0
+        End If
+    Next k
+    Call SendEmail
+    wbk.Close SaveChanges:=False
+    Call close_sap
+    Application.DisplayAlerts = True
+    Application.ScreenUpdating = True
+End Sub
+'this version does not format the table well, use SendMail instead
+Sub send_mail()
+    Dim sMail_to As String
+    Dim sSubject As String
+    Dim sBody As String
+    last_row = ActiveSheet.UsedRange.Rows.Count
+    sBody = "Material" & vbTab & "Desc" & vbTab & "MRP Controller" & vbTab & "Short Qty"
+    For i = 2 To last_row
+        If Cells(i, 24) > 0 Then
+            sLine = Cells(i, 1).Text & vbTab & Cells(i, 2).Text & vbTab & Cells(i, 13).Text & vbTab & _
+                    Cells(i, 24).Text
+            sBody = sBody & vbCrLf & sLine
+            If InStr(1, sMail_to, Cells(i, 13)) = 0 Then
+                If sMail_to = "" Then
+                    sMail_to = Cells(i, 13)
+                Else
+                    sMail_to = sMail_to & ";" & Cells(i, 13).Text
+                End If
+            End If
+        End If
+    Next i
+    sSubject = "Kanban Short Qty Reminder"
+    If sMail_to <> "" Then
+         Set OutApp = CreateObject("Outlook.Application")
+         Set OutMail = OutApp.CreateItem(0)
+        
+          On Error Resume Next
+         ' Change the mail address and subject in the macro before running the procedure.
+          With OutMail
+              .To = sMail_to '"xin_yong.yu@siemens.com"
+              .CC = ""
+              .BCC = ""
+              .Subject = sSubject '"This is the Subject line"
+              .Body = "Dear " & sTitle & ":" & vbCrLf & sBody '"Hello World!"
+              .Attachments.Add Destwb.FullName
+              ' You can add other files by uncommenting the following statement.
+              '.Attachments.Add ("C:\test.txt")
+              ' In place of the following statement, you can use ".Display" to
+              ' display the mail.
+              .Send
+          End With
+         Set OutMail = Nothing
+         Set OutApp = Nothing
+    End If
+End Sub
+
+Sub SendEmail()
+    Dim ws As Worksheet
+    Dim sMail_to As String
+    Dim SendingRng As Range
+    
+    Set ws = Nothing
+    
+    On Error Resume Next
+        Set ws = Sheets("mail_template")
+    If Err.Number = 0 Then
+        ws.UsedRange.ClearContents
+    Else
+        Set ws = Sheets.Add(After:=Sheets(Sheets.Count))
+        ws.Name = "mail_template"
+    End If
+    'ws.Select
+    ws.Cells(1, 1) = "Material"
+    ws.Cells(1, 2) = "Description"
+    ws.Cells(1, 3) = "MRP Controller"
+    ws.Cells(1, 4) = "Short Qty"
+    i = 2
+    For j = 2 To Sheets("KANBAN").UsedRange.Rows.Count
+        If Sheets("KANBAN").Cells(j, 24) > 0 Then
+            ws.Cells(i, 1) = Sheets("KANBAN").Cells(j, 1)
+            ws.Cells(i, 2) = Sheets("KANBAN").Cells(j, 2)
+            ws.Cells(i, 3) = Sheets("KANBAN").Cells(j, 13)
+            ws.Cells(i, 4) = Sheets("KANBAN").Cells(j, 24)
+            i = i + 1
+            If InStr(1, sMail_to, Sheets("KANBAN").Cells(i, 13)) = 0 Then
+                If sMail_to = "" Then
+                    sMail_to = Sheets("KANBAN").Cells(i, 13)
+                Else
+                    sMail_to = sMail_to & ";" & Sheets("KANBAN").Cells(i, 13).Text
+                End If
+            End If
+        End If
+    Next j
+    If i = 2 Then Exit Sub   ' no mail need to be sent
+    On Error GoTo StopMacro
+    With Application
+        .ScreenUpdating = False
+        .EnableEvents = False
+    End With
+    ws.Select
+    ws.Range("A:D").EntireColumn.AutoFit
+    Set SendingRng = ws.Range("A1:d" & ActiveSheet.UsedRange.Rows.Count)
+    SendingRng.Borders.LineStyle = xlContinuous
+    With SendingRng
+        .Parent.Select
+        .Select
+        ActiveWorkbook.EnvelopeVisible = True ' Create the mail and send it
+        With .Parent.MailEnvelope
+            .Introduction = "Please follow up and make sure the below material available ASAP."
+            With .Item
+                .To = sMail_to '"xin_yong.yu@siemens-healthineers.com"
+                .CC = ""
+                .BCC = ""
+                .Subject = "Kanban material short quantity reminder"
+                .Send
+            End With
+        End With
+    End With
+StopMacro:
+    With Application
+        .ScreenUpdating = True
+        .EnableEvents = True
+    End With
+    ActiveWorkbook.EnvelopeVisible = False
+    Sheets("KANBAN").Select
+End Sub
