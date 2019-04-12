@@ -1,0 +1,11 @@
+https://stackoverflow.com/questions/9698557/how-to-use-pip-on-windows-behind-an-authenticating-proxy
+
+I ran into the same issue on windows 7. I managed to get it working by creating a "pip" folder with a "pip.ini" file inside it. I put this folder inside "C:\Users\{my.username}\AppData\Roaming", because according to the Python documentation:
+
+On Windows the configuration file is %APPDATA%\pip\pip.ini
+
+In the pip.ini file I have only:
+
+[global]
+proxy = [proxy address]:[proxy port]
+So no username:password. And it is working just fine.
