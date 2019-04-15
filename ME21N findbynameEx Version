@@ -1,0 +1,280 @@
+   Global SapGuiAuto As Object
+   Global Application As Object
+   Global Connection As Object
+   Global session As Object
+   
+Sub ME21N_create_po()
+    'Default layout of ME21N should be" header and item expanded/unfolded
+    po = InputBox("ReferID", "Input Your ReferID", "")
+    If po = "" Then Exit Sub 'Cancel running with click Cancel button
+    Dim conn As ADODB.Connection
+    Dim rs As ADODB.Recordset
+    Dim sConnString As String
+    
+    Set SapGuiAuto = GetObject("SAPGUI")  'Get the SAP GUI Scripting object
+    Set SAPApp = SapGuiAuto.GetScriptingEngine 'Get the currently running SAP GUI
+    Set SAPCon = SAPApp.Children(0) 'Get the first system that is currently connected
+    Set session = SAPCon.Children(0) 'Get the first session (window) on that connection
+    'check whether the PA already created in SAP before
+    'session.findById("wnd[0]").iconify
+    session.findById("wnd[0]/tbar[0]/okcd").Text = "/nme2n"
+    session.findById("wnd[0]").sendVKey 0
+    session.findById("wnd[0]/tbar[1]/btn[16]").press   'dynamic selection
+    Set dyn_select = session.findById("wnd[0]/usr").FindByNameEx("shellcont[1]", 51).FindByNameEx("shell", 122)
+    dyn_select.expandNode "          1"
+    dyn_select.selectNode "         56"    'select Your reference field from PO header table
+    dyn_select.doubleClickNode "         56"
+    Set dyn_select = Nothing
+    session.findById("wnd[0]/usr").FindByNameEx("%%DYN001-LOW", 31).Text = po
+    session.findById("wnd[0]/tbar[1]/btn[8]").press
+    msg = session.findById("wnd[0]/sbar").Text
+    If msg = "" Then 'normally if PO not created ,the message will be returned :No suitable purchasing documents found, otherwise no message
+       old_po = ""
+       On Error Resume Next
+            session.findById ("wnd[0]/usr/lbl[1,5]")
+       If Err.Number = 0 Then old_po = session.findById("wnd[0]/usr/lbl[1,5]").Text
+       MsgBox "PO " & old_po & " already created for this PA, please check PO header->communication->Your reference field"
+       Exit Sub
+    End If
+
+    Dim intRow, i, last_po, Ct, row ' Ct: current counter of line item
+    ' Create the connection string.
+    sConnString = "Provider=SQLOLEDB;Data Source='139.24.192.78';" & _
+                  "Initial Catalog='jwdb';" & _
+                  "Integrated Security=SSPI;Trusted_connection=yes"
+    ' Create the Connection and Recordset objects.
+    Set conn = New ADODB.Connection
+    Set rs = New ADODB.Recordset
+    ' Open the connection and execute.
+    conn.Open sConnString
+    Set rs = conn.Execute("select * from View_P03_PO where c_ReferID = " & "'" & po & "'")
+
+    Ct = 0         ' current counter
+    item_count = 0
+    cost_item_count = 0
+    last_po = ""
+    last_po_item = ""
+    Position = 0
+    If Not rs.EOF Then
+        session.findById("wnd[0]").maximize
+        session.findById("wnd[0]/tbar[0]/okcd").Text = "/nme21n"
+        session.findById("wnd[0]").sendVKey 0
+        On Error Resume Next   'if header section is initially folded, press the expand button to set the correct layout
+            session.findById("wnd[0]/usr").FindByNameEx("DYN_4000-BUTTON", 40).press
+        session.findById("wnd[0]/usr").FindByNameEx("MEPO_TOPLINE-BSART", 34).Key = "NB"   'order type
+        session.findById("wnd[0]/usr").FindByNameEx("MEPO_TOPLINE-SUPERFIELD", 32).Text = rs(1).Value 'vendor '"9300297"
+        If po_date <> "" Then ' below line does not needed
+            session.findById("wnd[0]/usr").FindByNameEx("MEPO_TOPLINE-BEDAT", 32).Text = po_date '"23.12.2015"
+        End If
+        session.findById("wnd[0]").sendVKey 0  'press ENTER to make the purchase group field ready for input
+        session.findById("wnd[0]").sendVKey 0  'press ENTER to make the purchase group field ready for input
+        On Error Resume Next ' purchase org and company should be default, purchase group to be set
+           session.findById("wnd[0]/usr").FindByNameEx("MEPO1222-EKGRP", 32).Text = Left(rs(2).Value, 3) 'purchase_group '"ACR"
+        curr = rs(10).Value
+        session.findById("wnd[0]/usr").FindByNameEx("TABHDT1", 91).Select
+        session.findById("wnd[0]/usr").FindByNameEx("MEPO1226-WAERS", 32).Text = curr 'curr '"eur"
+        session.findById("wnd[0]/usr").FindByNameEx("TABHDT5", 91).Select
+        session.findById("wnd[0]/usr").FindByNameEx("MEPOCOMM-UNSEZ", 31).Text = po '"id006"
+        session.findById("wnd[0]").sendVKey 0
+        If session.findById("wnd[0]/sbar").messagetype = "E" Then
+            MsgBox "Error with message: " & session.findById("wnd[0]/sbar").Text
+            Exit Sub
+        End If
+        Ct = 0 ' the very first item
+    Else
+      MsgBox "Invalid Refer ID: " + po + ", No records from workflow system returned!"
+      Exit Sub
+    End If
+    
+    Do While Not rs.EOF
+        po_item = Trim(CStr(rs(0).Value))
+        vendor = Trim(CStr(rs(1).Value))
+        'po_date = Trim(CStr(rs(2).Value))
+        purchase_group = UCase(Trim(CStr(rs(2).Value)))
+        material = Trim(CStr(rs(3).Value))
+        mat_desc = Trim(CStr(rs(4).Value))   'description is key word which will cause write read-only property error!!!
+        If material <> "" Then  'material number only as part of description, not real sap material number
+           mat_desc = material + " " + mat_desc
+        End If
+        mat_desc = Left(mat_desc, 40)  'character length limit is 40
+        mat_desc = Replace(Replace(mat_desc, Chr(13), ""), Chr(10), "")  'remove carriage return/line break in the string!!
+        material_group = Trim(CStr(rs(5).Value))
+        aac = Trim(CStr(rs(6).Value))
+        quantity = Trim(CStr(rs(7).Value))
+        uom = Trim(CStr(rs(8).Value))
+        Price = Trim(CStr(rs(9).Value))
+        plant = rs(11).Value
+        del_date = Trim(CStr(rs(12).Value))
+        requisitioner = Left(Trim(CStr(rs(13).Value)), 12) ' limit 12 characters
+        gl_account = Trim(CStr(rs(14).Value))
+        unloading_point = Trim(CStr(rs(15).Value))
+        recipient = Trim(CStr(rs(16).Value))
+        internal_order = Trim(CStr(rs(17).Value))
+        wbs = Trim(CStr(rs(18).Value))
+        asset = Trim(CStr(rs(19).Value))
+        cost_center = rs(20).Value
+        percentage = rs(21).Value
+        tax_code = rs(23).Value  'input parameter PO is 22nd column
+        price_base = rs(24).Value  'price base   20171222
+        prno = rs(26).Value
+        If material_group = "" Then material_group = "qsa"
+       
+        If po_item <> last_po_item Then   ' new item
+            last_po_item = po_item
+            item_count = item_count + 1
+            cost_split_count = 1
+            row = 0
+        Else
+            cost_split_count = cost_split_count + 1
+            row = 1
+        End If
+        If cost_split_count = 1 Then
+            Set cur_row = session.findById("wnd[0]/usr").FindByNameEx("SAPLMEGUITC_1211", 80).Rows(Ct)
+            cur_row(2).Text = aac
+            cur_row(5).Text = mat_desc
+            cur_row(6).Text = quantity
+            cur_row(7).Text = uom
+            cur_row(9).Text = del_date
+            cur_row(10).Text = Price
+            cur_row(12).Text = price_base
+            cur_row(14).Text = material_group
+            cur_row(15).Text = plant
+            cur_row(18).Text = prno
+            cur_row(19).Text = requisitioner
+            set_cur_row = Nothing
+            If Ct = 0 Then Ct = 1  ' next following items after the 1st one
+            session.findById("wnd[0]").sendVKey 0
+        End If
+        'hanlde cost split case:account multiple button
+        If UCase(aac) = "K" And percentage <> "100" Then   ' cost split case
+            session.findById("wnd[0]/usr").FindByNameEx("TABIDT12", 91).Select
+            If row = 0 Then  'start of cost split when new item with cost split
+                On Error Resume Next   'check whether the pencentage column in split table is visible/can
+                    session.findById("wnd[0]/usr").FindByNameEx("MEACCT1200-VRTKZ", 34).Key = "2"
+                If Err.Number <> 0 Then
+                    session.findById("wnd[0]/usr").FindByNameEx("MEACCT1200TB", 50).FindByNameEx("shell", 122).pressButton "MEAC1200DETAILTOGGLE"
+                    session.findById("wnd[0]/usr").FindByNameEx("MEACCT1200-VRTKZ", 34).Key = "2"
+                End If
+                session.findById("wnd[0]/usr").FindByNameEx("MEACCT1200-TWRKZ", 34).Key = "2"
+                session.findById("wnd[0]").sendVKey 0
+                first_percentage = percentage
+            End If
+            Set cur_row = session.findById("wnd[0]/usr").FindByNameEx("SAPLMEACCTVIDYN_1000TC", 80).Rows(row)
+            cur_row(3).Text = percentage
+            cur_row(4).Text = cost_center
+            cur_row(5).Text = gl_account
+            cur_row(7).Text = unloading_point
+            cur_row(8).Text = recipient
+            Set cur_row = Nothing
+            Position = session.findById("wnd[0]/usr").FindByNameEx("SAPLMEACCTVIDYN_1000TC", 80).verticalScrollbar.Position
+            If cost_split_count = 2 Then 'restore the first cost split which has been reset by system automatically
+                 session.findById("wnd[0]/usr").FindByNameEx("SAPLMEACCTVIDYN_1000TC", 80).verticalScrollbar.Position = 0
+                 Set cur_row = session.findById("wnd[0]/usr").FindByNameEx("SAPLMEACCTVIDYN_1000TC", 80).Rows(0)
+                 cur_row(3).Text = first_percentage
+                 Set cur_row = Nothing
+            End If
+            session.findById("wnd[0]/usr").FindByNameEx("SAPLMEACCTVIDYN_1000TC", 80).verticalScrollbar.Position = Position + 1
+        Else
+            If UCase(aac) = "K" Or UCase(aac) = "F" Or UCase(aac) = "P" Or UCase(aac) = "A" Then
+                'Fisher 2018-04-12 handle the case that the previous item is cost split, the next item is non cost split
+                On Error Resume Next
+                    Set unloading_field = session.findById("wnd[0]/usr").FindByNameEx("MEACCT1100-ABLAD", 31)
+                If unloading_field Is Nothing Then
+                    session.findById("wnd[0]/usr").FindByNameEx("MEACCT1200TB", 50).FindByNameEx("shell", 122).pressButton "MEAC1200DETAILTOGGLE"
+                Else
+                    Set unloading_field = Nothing
+                End If
+                '2018-04-12
+                session.findById("wnd[0]/usr").FindByNameEx("TABIDT12", 91).Select
+                session.findById("wnd[0]/usr").FindByNameEx("MEACCT1100-ABLAD", 31).Text = unloading_point '"ssmr warehouse"
+                session.findById("wnd[0]/usr").FindByNameEx("MEACCT1100-WEMPF", 31).Text = Left(recipient, 12) '"yuxinyong"
+                If UCase(aac) <> "A" Then  'when aac = A, no GL account needed
+                    session.findById("wnd[0]/usr").FindByNameEx("MEACCT1100-SAKTO", 32).Text = gl_account '"26390000"
+                End If
+                If UCase(aac) = "K" Then
+                    session.findById("wnd[0]/usr").FindByNameEx("COBL-KOSTL", 32).Text = cost_center '"830702"
+                ElseIf UCase(aac) = "F" Then
+                    session.findById("wnd[0]/usr").FindByNameEx("COBL-AUFNR", 32).Text = internal_order '"830702"
+                ElseIf UCase(aac) = "P" Then
+                    session.findById("wnd[0]/usr").FindByNameEx("COBL-PS_POSID", 32).Text = wbs '"830702"
+                ElseIf UCase(aac) = "A" Then
+                    session.findById("wnd[0]/usr").FindByNameEx("COBL-ANLN1", 32).Text = asset  '"830702"
+                    session.findById("wnd[0]/usr").FindByNameEx("COBL-ANLN2", 32).Text = "0" '"830702"
+                End If
+                msg = press_enter_key()
+            End If
+        End If
+        If cost_split_count = 1 And tax_code <> "" Then   'begin of the item , input the tax code
+            session.findById("wnd[0]/usr").FindByNameEx("TABIDT7", 91).Select
+            session.findById("wnd[0]/usr").FindByNameEx("MEPO1317-MWSKZ", 31).Text = tax_code '"j1"
+            session.findById("wnd[0]").sendVKey 0  ' ensure the follow switch of tab can be successful
+        End If
+        rs.MoveNext
+        last_cost_split_item = False
+        scroll_next = False
+        If UCase(aac) = "K" And percentage <> "100" Then  ' cost split
+            If Not rs.EOF Then
+                If Trim(CStr(rs(0).Value)) <> po_item Then   ' next item changed, this is the last cost split sub item
+                   last_cost_split_item = True
+                End If
+            Else
+               last_cost_split_item = True
+            End If
+            If last_cost_split_item = True Then  'restore the first cost split which has been reset by system automatically
+                scroll_next = True
+            End If
+        Else
+            scroll_next = True
+        End If
+        If scroll_next = True Then  'scroll the vertical bar to make the input row always stay at index 1, weird sometimes the screen number is 0019 instead of 0020
+            session.findById("wnd[0]/usr").FindByNameEx("SAPLMEGUITC_1211", 80).verticalScrollbar.Position = Position + 1
+            Position = session.findById("wnd[0]/usr").FindByNameEx("SAPLMEGUITC_1211", 80).verticalScrollbar.Position
+        End If
+    Loop
+    session.findById("wnd[0]").sendVKey 0    'save the PO after all items input
+    session.findById("wnd[0]/tbar[0]/btn[11]").press
+    On Error Resume Next   'popup window PO notify PO is subject to release
+        session.findById ("wnd[1]/tbar[0]/btn[0]")
+    If Err.Number = 0 Then
+        session.findById("wnd[1]/tbar[0]/btn[0]").press
+    End If
+    messagetype = session.findById("wnd[0]/sbar").messagetype
+    If messagetype = "W" Then session.findById("wnd[0]").sendVKey 0
+    
+    On Error Resume Next  'in case there is error in new PO, save (hold) the PO by press ENTER on the popup window
+       session.findById ("wnd[1]/usr/btnSPOP-VAROPTION1")
+    If Err.Number = 0 Then session.findById("wnd[1]/usr/btnSPOP-VAROPTION1").press
+    result = session.findById("wnd[0]/sbar").Text
+    If InStr(result, "under the number") > 0 Then
+        po_strings = Split(result, " ")
+        sap_PO = po_strings(UBound(po_strings))  'PO for service created under the number 4700277146, the last item in the splitted array
+        result = result & " for po:" & po
+    Else
+        result = "failed creating new po"
+    End If
+    rs.Close
+    
+    If CBool(conn.State And adStateOpen) Then conn.Close
+    Set conn = Nothing
+    Set rs = Nothing
+    Set session = Nothing
+    Set Connection = Nothing
+    Set SAPApp = Nothing
+    Set SapGuiAuto = Nothing
+    MsgBox "Process Completed with result: " & result & " and error messages:" & msg
+End Sub
+
+Function press_enter_key()
+    session.findById("wnd[0]").sendVKey 0
+    For i = 1 To 5
+        messagetype = session.findById("wnd[0]/sbar").messagetype
+        If messagetype = "W" Then
+            session.findById("wnd[0]").sendVKey 0
+        ElseIf messagetype = "E" Then
+            press_enter_key = session.findById("wnd[0]/sbar").Text
+            Exit For
+        Else
+            Exit For
+        End If
+    Next i
+End Function
