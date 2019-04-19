@@ -1,0 +1,320 @@
+Global SapGuiAuto As Object
+Global SAPApp As Object
+Global session As Object
+Global SAPConion As Object
+Sub open_sap()
+    If session Is Nothing Then
+        Set SapGuiAuto = GetObject("SAPGUI")  'Get the SAP GUI Scripting object
+        Set SAPApp = SapGuiAuto.GetScriptingEngine 'Get the currently running SAP GUI
+        Set SAPCon = SAPApp.Children(0) 'Get the first system that is currently connected
+        Set session = SAPCon.Children(0) 'Get the first session (window) on that connection
+    End If
+End Sub
+
+Sub close_sap()
+    If Not SAPApp Is Nothing Then
+        Set session = Nothing
+        Set SAPCon = Nothing
+        Set SAPApp = Nothing
+        Set SapGuiAuto = Nothing
+        MsgBox "Process Completed"
+    End If
+End Sub
+
+Sub va03_download_sales_order()
+    Dim country As String
+    Dim sales_order As String
+    
+    sales_order = InputBox("Sales Order", "Input Your Sales Order Number", "8759931")
+    If sales_order = "" Then Exit Sub
+    
+    Call open_sap
+    
+    On Error Resume Next
+    Set sheet_sales_order = Sheets("Sales Order_" & sales_order)
+    If Err.Number = 0 Then
+        sheet_sales_order.Cells.Clear
+    Else
+        Set sheet_sales_order = Sheets.Add(After:=Sheets(Sheets.Count))
+        sheet_sales_order.Name = "Sales Order_" & sales_order
+    End If
+    sheet_sales_order.Cells(1, 1) = "Item"
+    sheet_sales_order.Cells(1, 2) = "Material"
+    sheet_sales_order.Cells(1, 3) = "Desc"
+    
+    detect_column_finished = False
+    session.findById("wnd[0]").maximize
+    session.findById("wnd[0]/tbar[0]/okcd").Text = "/nva03"
+    session.findById("wnd[0]").sendVKey 0
+    session.findById("wnd[0]/usr/ctxtVBAK-VBELN").Text = sales_order 'sales order "8403593"
+    session.findById("wnd[0]").sendVKey 0
+    If session.findById("wnd[0]/sbar").MessageType = "E" Then
+        MsgBox session.findById("wnd[0]/sbar").Text
+        Exit Sub
+    End If
+    
+    session.findById("wnd[0]/mbar/menu[4]/menu[0]/menu[3]").Select  'display ship to party
+    country = session.findById("wnd[0]/usr").findByNameEx("ADDR1_DATA-COUNTRY", 32).Text
+    session.findById("wnd[0]/tbar[0]/btn[3]").press                'back
+    
+    session.findById("wnd[0]/usr/tabsTAXI_TABSTRIP_OVERVIEW/tabpT\02").Select
+            
+    Set items = session.findById("wnd[0]/usr").findByNameEx("SAPMV45ATCTRL_U_ERF_AUFTRAG", 80)
+    total_items = items.verticalScrollbar.Maximum + 1 '
+    If total_items = 0 Then
+       total_items = 1
+    End If
+    PageSize = items.verticalScrollbar.PageSize
+    items.verticalScrollbar.Position = 0
+    Set cur_row = items.Rows(0)
+    col_count = 0
+    For ii = 0 To cur_row.Count - 1     'get the col index due to different user settings
+        col_count = col_count + 1
+        If cur_row(ii + 0).Name = "VBAP-POSNR" Then '+0 to force convert to expected Integer type, otherwise there will be error:Bad index type for collection access
+            col_item = ii + 0
+        ElseIf cur_row(ii + 0).Name = "RV45A-MABNR" Then
+            col_mat = ii + 0
+        ElseIf cur_row(ii + 0).Name = "VBAP-PSTYV" Then
+            col_item_category = ii + 0
+        ElseIf cur_row(ii + 0).Name = "VBAP-ARKTX" Then
+            col_desc = ii + 0
+        ElseIf cur_row(ii + 0).Name = "VBAP-ABGRU" Then
+            ID = cur_row(ii + 0).ID
+            'ID = Replace(ID, Table & "cmbVBAP-ABGRU[", "")  'retrieve the column from ID field, other than the sequence.
+            ID = Split(ID, ",")(0)  'the first part before ,
+            col_rej_reason = Int(Right(ID, Len(ID) - InStr(ID, "ABGRU[") - 5))
+        Else
+            col_count = col_count - 1
+        End If
+        If col_count > 4 Then
+            Exit For
+        End If
+    Next ii
+        
+    seq = 1
+    For j = 1 To total_items
+        pageindex = j Mod PageSize
+        If pageindex = 1 Then
+            If j > 1 Then
+                session.findById("wnd[0]/tbar[0]/btn[82]").press   ' click the next page button
+                Set items = session.findById("wnd[0]/usr").findByNameEx("SAPMV45ATCTRL_U_ERF_AUFTRAG", 80)
+            End If
+            CurrentRow = 0
+        Else
+            CurrentRow = CurrentRow + 1
+        End If
+        Set cur_row = items.Rows(CurrentRow)
+        item_category = items.GetCell(CurrentRow, col_item_category).Text
+        On Error Resume Next
+            rej_reason = items.GetCell(CurrentRow, col_rej_reason).Text
+        If Err.Number <> 0 Then rej_reason = ""
+        material = items.GetCell(CurrentRow, col_mat).Text
+        If rej_reason = "" Then
+            sheet_sales_order.Cells(seq + 1, 1) = items.GetCell(CurrentRow, col_item).Text
+            sheet_sales_order.Cells(seq + 1, 2) = material
+            sheet_sales_order.Cells(seq + 1, 3) = items.GetCell(CurrentRow, col_desc).Text
+            'sheet_sales_order.Cells(seq + 1, 2) = item_category
+            seq = seq + 1
+        End If
+     Next j
+     
+     Call extract_config(sales_order, country)
+     Call close_sap
+End Sub
+
+Sub extract_config(sales_order As String, country As String)
+    Dim sheet_bom As Worksheet
+    Dim sheet_sales_order As Worksheet
+    Dim sheet_result As Worksheet
+    Dim item As String
+    Dim characteristic As String
+            
+    Set sheet_sales_order = Sheets("Sales Order_" & sales_order)
+    bom_sheet_name = ""
+    For k = 2 To Sheets("Template").UsedRange.Rows.Count
+        If sheet_sales_order.Cells(2, 2) = Sheets("Template").Cells(k, 1) Then
+            bom_sheet_name = Sheets("Template").Cells(k, 2)
+            Exit For
+        End If
+    Next k
+    If bom_sheet_name = "" Then
+        MsgBox "template BOM not defined in template for KMAT:" & sheet_sales_order.Cells(2, 1)
+        Exit Sub
+    End If
+    
+    On Error Resume Next
+        Set sheet_bom = Sheets(bom_sheet_name)
+    If Err.Number <> 0 Then
+        MsgBox "template sheet:" + bom_sheet_name + "does not exist"
+        Exit Sub
+    End If
+    
+    Set sheet_so_config = Sheets("config_" & sales_order)
+    If Err.Number = 0 Then
+        sheet_so_config.Cells.Clear
+    Else
+        Set sheet_so_config = Sheets.Add(After:=Sheets(Sheets.Count))
+        sheet_so_config.Name = "config_" & sales_order
+    End If
+        
+    last_row = sheet_bom.UsedRange.Rows.Count
+    last_row_sales_order = sheet_sales_order.UsedRange.Rows.Count
+    If last_row_sales_order < 2 Then Exit Sub
+    
+    seq = 1
+    sheet_so_config.Cells(1, 1) = "Material"
+    sheet_so_config.Cells(1, 2) = "Desc"
+    sheet_so_config.Cells(1, 3) = "Measurement Setting"
+    For i = 2 To last_row
+        material = remove_line_break(sheet_bom.Cells(i, 1).Text)
+        desc = remove_line_break(sheet_bom.Cells(i, 2).Text)
+        yes_config = remove_line_break(sheet_bom.Cells(i, 3).Text)
+        no_config = remove_line_break(sheet_bom.Cells(i, 4).Text)
+        yes_config_1 = remove_line_break(sheet_bom.Cells(i, 5).Text)  'depends on above line config result
+        no_config_1 = remove_line_break(sheet_bom.Cells(i, 6).Text)
+        
+        config = yes_config
+        current_result = "Y"
+        If UCase(material) = "CHINA" Then
+            If UCase(country) <> "CN" Then
+                config = no_config
+                current_result = "N"
+            End If
+        ElseIf InStr(1, UCase(material), "=") > 0 Then
+            characteristic = Trim(Split(material, "=")(0))
+            checked_characteristic_value = Trim(Split(material, "=")(1))
+            item = sheet_sales_order.Cells(2, 1).Text
+            characteristic_value = get_characteristic_value(sales_order, item, characteristic)
+            If characteristic_value = "characteristic not found" Then
+                config = "characteristic:" & characteristic & " not found in order configuration list, please manually check!"
+                current_result = "N"
+            ElseIf UCase(characteristic_value) <> UCase(checked_characteristic_value) Then
+                config = no_config
+                current_result = "N"
+            End If
+        ElseIf material <> "" Then
+            material_found = False
+            For j = 2 To last_row_sales_order
+                If InStr(1, material, sheet_sales_order.Cells(j, 2)) > 0 Then
+                    material_found = True
+                    Exit For
+                End If
+            Next j
+            If material_found = False Then
+                config = no_config
+                current_result = "N"
+            End If
+        End If
+        If material = sheet_bom.Cells(i - 1, 3) And material = sheet_bom.Cells(i - 1, 4) Then 'same material
+            If previous_result = "N" Then
+                If material_found = True Then
+                    config = yes_config_1
+                Else
+                    config = no_config_1
+                End If
+            End If
+        End If
+        previous_result = current_result
+        
+        'to be decided by next level material, so the config result to be cleared
+        If (IsNumeric(config) = True And (Len(config) = 7 Or Len(config) = 8)) Then config = ""
+
+        configs = Split(config, ";")   'split the config by ; shown on separate lines
+        For m = 0 To UBound(configs)
+           sheet_so_config.Cells(seq + 1, 1) = material
+           'special handling of check by country=China
+           If UCase(material) = "CHINA" And country <> "CN" Then sheet_so_config.Cells(seq + 1, 1) = "Country=" & country
+           sheet_so_config.Cells(seq + 1, 2) = desc
+           sheet_so_config.Cells(seq + 1, 3) = configs(m)
+           seq = seq + 1
+        Next m
+    Next i
+    
+    With sheet_so_config
+        .Columns("A:C").AutoFit
+        .Cells.Font.Size = 10
+        .Rows(1).HorizontalAlignment = xlCenter
+    End With
+End Sub
+
+Function get_characteristic_value(sales_order As String, item As String, characteristic As String)
+    session.findById("wnd[0]").maximize
+    session.findById("wnd[0]/tbar[0]/okcd").Text = "/nva03"
+    session.findById("wnd[0]").sendVKey 0
+    session.findById("wnd[0]/usr/ctxtVBAK-VBELN").Text = sales_order 'sales order "8403593"
+    session.findById("wnd[0]").sendVKey 0
+    session.findById("wnd[0]/usr/tabsTAXI_TABSTRIP_OVERVIEW/tabpT\02").Select  'switch to item overview tab page
+    session.findById("wnd[0]/usr/").findByNameEx("BT_POPO", 40).press  'swith to item
+    session.findById("wnd[1]/usr/txtRV45A-POSNR").Text = item
+    session.findById("wnd[1]/tbar[0]/btn[0]").press
+    On Error Resume Next
+        session.findById ("wnd[2]")
+    If Err.Number = 0 Then
+        session.findById("wnd[2]").Close
+        MsgBox "item" & item & " not in sales order"
+        Exit Function
+    End If
+    session.findById("wnd[0]/usr").findByNameEx("BT_POCO", 40).press
+    Set items = session.findById("wnd[0]/usr").findByNameEx("SAPLCEI0CHARACTER_VALUES", 80)
+    total_items = items.verticalScrollbar.Maximum + 1 '
+    If total_items = 0 Then total_items = 1
+    
+    PageSize = items.verticalScrollbar.PageSize
+    items.verticalScrollbar.Position = 0
+    Set cur_row = items.Rows(0)
+    For j = 1 To total_items
+        pageindex = j Mod PageSize
+        If pageindex = 1 Then
+            If j > 1 Then
+                session.findById("wnd[0]/tbar[0]/btn[82]").press   ' click the next page button
+                Set items = session.findById("wnd[0]/usr").findByNameEx("SAPLCEI0CHARACTER_VALUES", 80)
+            End If
+            CurrentRow = 0
+        Else
+            CurrentRow = CurrentRow + 1
+        End If
+        Set cur_row = items.Rows(CurrentRow)
+        If items.GetCell(CurrentRow, 0).Text = characteristic Then
+            get_characteristic_value = items.GetCell(CurrentRow, 1).Text
+            Exit Function   'this is needed, because assign value to function name does not return immediately
+        End If
+     Next j
+     get_characteristic_value = "characteristic not found"
+End Function
+
+Function remove_line_break(myString)
+    If Len(myString) > 2 Then
+        If Right(myString, 2) = vbCrLf Or Right(myString, 2) = vbNewLine Then
+            remove_line_break = Left(myString, Len(myString) - 2)
+        End If
+    End If
+    remove_line_break = myString
+End Function
+
+Guidelines		
+1. worksheet as in Column B to be created per each system		
+2. Rules for maintaining the above mentioned system worksheet		
+2.1	Column A for material , characteristic value comparison	
+	2.1.1	for material, only material number , no description, support multi material separated by /
+	2.1.2	for special characteristic country, just input CHINA
+	2.1.3	for other characteristic comparison, input like line frequency = 50 HZ,
+		here line frequency is characteristic, 50HZ is characteristic value, to be exactly match the sales 
+		order configuration detail list
+	2.1.4	for mandatory configuration, material column to be kept empty
+2.2	material description, for other cases leave it empty	
+2.3	column C & D Yes config and No config,	
+	2.3.1	maintain the configuration detail text per flow chart, if it is linked to sub-level material
+		input material number without the description
+	2.3.2	if there are multi configuration/box , separate them by ;, in the final output, it will be shown as separated configuration
+3	column E & F for same material under a higher level material 	
+	3.1	just as 2.3.1 mentioned, input same sub material number for higher material row
+	3.2	maintain the C&D column for higher level Y path, maintain E&F column for higher level material N path in flow chart
+3	how it works	
+	3.1	click the Extract Sales Order Configuration button, fill the sales order number in popup window, press ENTER
+	3.2	script will auto download the sales order material list, including item, material and description, rejected items auto skipped
+	3.3	script will use the first sales order item to map the worksheet as configuration rule list
+	3.4	script will check the configuration rule worksheet from top to bottom
+	3.5	if content in column A is like XX=YY, XX is extracted as characteristic, 
+		YY as to-be checked characteristic value, characteristic value for checking
+		it will launch VA03 and go to the configuration detail subscreen to get the relevant characteristic and 
+For more details, check the sample Essenza VE11Q worksheet and the final output config_8759931		
