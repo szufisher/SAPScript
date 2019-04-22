@@ -128,6 +128,8 @@ Sub extract_config(sales_order As String, country As String)
     Dim sheet_result As Worksheet
     Dim item As String
     Dim characteristic As String
+    Dim i As Integer
+    Dim last_row As Integer
             
     Set sheet_sales_order = Sheets("Sales Order_" & sales_order)
     bom_sheet_name = ""
@@ -148,6 +150,7 @@ Sub extract_config(sales_order As String, country As String)
         MsgBox "template sheet:" + bom_sheet_name + "does not exist"
         Exit Sub
     End If
+    sheet_bom.Columns("G:G").Clear
     
     Set sheet_so_config = Sheets("config_" & sales_order)
     If Err.Number = 0 Then
@@ -166,18 +169,28 @@ Sub extract_config(sales_order As String, country As String)
     sheet_so_config.Cells(1, 2) = "Desc"
     sheet_so_config.Cells(1, 3) = "Measurement Setting"
     For i = 2 To last_row
+        If sheet_bom.Cells(i, 7) = "To Skip" Then
+            Call skip_not_selected_material(sheet_bom, i, last_row, sheet_bom.Cells(i, 3).Text)
+            Call skip_not_selected_material(sheet_bom, i, last_row, sheet_bom.Cells(i, 4).Text)
+            If sheet_bom.Cells(i, 5) <> "" Then Call skip_not_selected_material(sheet_bom, i, last_row, sheet_bom.Cells(i, 5).Text)
+            If sheet_bom.Cells(i, 6) <> "" Then Call skip_not_selected_material(sheet_bom, i, last_row, sheet_bom.Cells(i, 6).Text)
+            GoTo next_record
+        End If
+        
         material = remove_line_break(sheet_bom.Cells(i, 1).Text)
         desc = remove_line_break(sheet_bom.Cells(i, 2).Text)
         yes_config = remove_line_break(sheet_bom.Cells(i, 3).Text)
         no_config = remove_line_break(sheet_bom.Cells(i, 4).Text)
         yes_config_1 = remove_line_break(sheet_bom.Cells(i, 5).Text)  'depends on above line config result
         no_config_1 = remove_line_break(sheet_bom.Cells(i, 6).Text)
-        
+                        
         config = yes_config
         current_result = "Y"
+        to_skip_material = no_config 'skip the next material if not select via previous step
         If UCase(material) = "CHINA" Then
             If UCase(country) <> "CN" Then
                 config = no_config
+                to_skip_material = yes_config
                 current_result = "N"
             End If
         ElseIf InStr(1, UCase(material), "=") > 0 Then
@@ -188,8 +201,10 @@ Sub extract_config(sales_order As String, country As String)
             If characteristic_value = "characteristic not found" Then
                 config = "characteristic:" & characteristic & " not found in order configuration list, please manually check!"
                 current_result = "N"
+                to_skip_material = yes_config
             ElseIf UCase(characteristic_value) <> UCase(checked_characteristic_value) Then
                 config = no_config
+                to_skip_material = yes_config
                 current_result = "N"
             End If
         ElseIf material <> "" Then
@@ -203,19 +218,24 @@ Sub extract_config(sales_order As String, country As String)
             If material_found = False Then
                 config = no_config
                 current_result = "N"
+                to_skip_material = yes_config
             End If
         End If
         If material = sheet_bom.Cells(i - 1, 3) And material = sheet_bom.Cells(i - 1, 4) Then 'same material
             If previous_result = "N" Then
                 If material_found = True Then
                     config = yes_config_1
+                    to_skip_material = no_config_1
                 Else
                     config = no_config_1
+                    to_skip_material = yes_config_1
                 End If
             End If
         End If
         previous_result = current_result
         
+        Call skip_not_selected_material(sheet_bom, i, last_row, to_skip_material)
+                       
         'to be decided by next level material, so the config result to be cleared
         If (IsNumeric(config) = True And (Len(config) = 7 Or Len(config) = 8)) Then config = ""
 
@@ -228,6 +248,8 @@ Sub extract_config(sales_order As String, country As String)
            sheet_so_config.Cells(seq + 1, 3) = configs(m)
            seq = seq + 1
         Next m
+    
+next_record:
     Next i
     
     With sheet_so_config
@@ -235,6 +257,17 @@ Sub extract_config(sales_order As String, country As String)
         .Cells.Font.Size = 10
         .Rows(1).HorizontalAlignment = xlCenter
     End With
+End Sub
+
+Sub skip_not_selected_material(sheet_bom As Worksheet, ByVal i As Integer, ByVal last_row As Integer, ByVal to_skip_material As String)
+    If (IsNumeric(to_skip_material) = True And (Len(to_skip_material) = 7 Or Len(to_skip_material) = 8)) Then
+        For k = i + 1 To last_row
+            If remove_line_break(sheet_bom.Cells(k, 1).Text) = remove_line_break(to_skip_material) Then
+                sheet_bom.Cells(k, 7) = "To Skip"
+                Exit For
+            End If
+        Next k
+    End If
 End Sub
 
 Function get_characteristic_value(sales_order As String, item As String, characteristic As String)
@@ -283,6 +316,7 @@ Function get_characteristic_value(sales_order As String, item As String, charact
 End Function
 
 Function remove_line_break(myString)
+    myString = WorksheetFunction.Trim(myString)
     If Len(myString) > 2 Then
         If Right(myString, 2) = vbCrLf Or Right(myString, 2) = vbNewLine Then
             remove_line_break = Left(myString, Len(myString) - 2)
@@ -290,6 +324,7 @@ Function remove_line_break(myString)
     End If
     remove_line_break = myString
 End Function
+
 
 Guidelines		
 1. worksheet as in Column B to be created per each system		
