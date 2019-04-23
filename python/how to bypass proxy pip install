@@ -1,0 +1,6 @@
+in the c:\user\{yourname}\
+create pip folder, create pip.ini file with following content
+
+[global]
+timeout=60
+http://mirrors.aliyun.com/pypi/simple/
