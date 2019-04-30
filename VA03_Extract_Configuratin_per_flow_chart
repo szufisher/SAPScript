@@ -140,7 +140,7 @@ Sub extract_config(sales_order As String, country As String)
         End If
     Next k
     If bom_sheet_name = "" Then
-        MsgBox "template BOM not defined in template for KMAT:" & sheet_sales_order.Cells(2, 1)
+        MsgBox "template BOM not defined in template for KMAT:" & sheet_sales_order.Cells(2, 1) & " " & sheet_sales_order.Cells(2, 2)
         Exit Sub
     End If
     
@@ -221,7 +221,8 @@ Sub extract_config(sales_order As String, country As String)
                 to_skip_material = yes_config
             End If
         End If
-        If material = sheet_bom.Cells(i - 1, 3) And material = sheet_bom.Cells(i - 1, 4) Then 'same material
+        If material = remove_line_break(sheet_bom.Cells(i - 1, 3)) And _
+           material = remove_line_break(sheet_bom.Cells(i - 1, 4)) Then 'same material
             If previous_result = "N" Then
                 If material_found = True Then
                     config = yes_config_1
@@ -236,8 +237,8 @@ Sub extract_config(sales_order As String, country As String)
         
         Call skip_not_selected_material(sheet_bom, i, last_row, to_skip_material)
                        
-        'to be decided by next level material, so the config result to be cleared
-        If (IsNumeric(config) = True And (Len(config) = 7 Or Len(config) = 8)) Then config = ""
+        'to be decided by next level material, so the config result to be cleared as blank
+        If (IsNumeric(config) = True And (Len(config) = 7 Or Len(config) = 8)) Then config = " "
 
         configs = Split(config, ";")   'split the config by ; shown on separate lines
         For m = 0 To UBound(configs)
@@ -251,7 +252,7 @@ Sub extract_config(sales_order As String, country As String)
     
 next_record:
     Next i
-    
+    sheet_bom.Columns("G:G").Clear
     With sheet_so_config
         .Columns("A:C").AutoFit
         .Cells.Font.Size = 10
@@ -317,12 +318,14 @@ End Function
 
 Function remove_line_break(myString)
     myString = WorksheetFunction.Trim(myString)
+    remove_line_break = myString   'default as original trimmed string,
     If Len(myString) > 2 Then
         If Right(myString, 2) = vbCrLf Or Right(myString, 2) = vbNewLine Then
             remove_line_break = Left(myString, Len(myString) - 2)
+        ElseIf Right(myString, 1) = Chr(10) Then   'remove line break/
+            remove_line_break = Left(myString, Len(myString) - 1)
         End If
     End If
-    remove_line_break = myString
 End Function
 
 
