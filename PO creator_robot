@@ -178,7 +178,7 @@ Sub robot()
                 Cells(last_row, 2) = pa
                 Cells(last_row, 3) = msg
                 last_row = last_row + 1
-                Call Send_Email("xin_yong.yu@siemens.com", msg, " auto mail from robot")
+                Call Send_Email("", msg, " auto mail from robot")
                 rs1.MoveNext
             Loop
         End If
@@ -255,7 +255,7 @@ Function new_po(ByVal po As String, ByVal order_type As String, company As Strin
         ' maintain vendor email
         session.findById("wnd[0]/usr").FindByNameEx("TABHDT4", 91).Select  'address tab
         session.findById("wnd[0]/usr").FindByNameEx("BUTTON_VENDOR_ADDRESS_DETAILS", 40).press
-        session.findById("wnd[1]/usr/txtSZA1_D0100-SMTP_ADDR").Text = "xin_yong.yu@siemens.com"   'mail
+        session.findById("wnd[1]/usr/txtSZA1_D0100-SMTP_ADDR").Text = ""   'mail
         session.findById("wnd[1]/tbar[0]/btn[0]").press
                   
         curr = rs(10).Value
@@ -441,9 +441,9 @@ Function new_po(ByVal po As String, ByVal order_type As String, company As Strin
         session.findById("wnd[0]/tbar[0]/btn[3]").press          ' F3 goback to main screen
         session.findById("wnd[1]/usr/btnSPOP-VAROPTION2").press    'click Edit button
         session.findById("wnd[1]").Close           'close the popup window
-        session.findById("wnd[0]/usr").FindByNameEx("TABHDT11", 91).Select   'siemens add-on tab
+        session.findById("wnd[0]/usr").FindByNameEx("TABHDT11", 91).Select   ' add-on tab
         If Err.Number <> 0 Then session.findById("wnd[0]/usr").FindByNameEx("DYN_4000-BUTTON", 40).press
-        session.findById("wnd[0]/usr").FindByNameEx("TABHDT11", 91).Select   'siemens add-on tab
+        session.findById("wnd[0]/usr").FindByNameEx("TABHDT11", 91).Select   'add-on tab
         session.findById("wnd[0]/usr").FindByNameEx("YYSPSSTATUS", 34).Key = "R"  'release the vendor
         session.findById("wnd[0]/tbar[0]/btn[11]").press                          'click save button again
     End If
@@ -754,12 +754,12 @@ Sub Send_Email(mail_to As String, po As String, msg As String)
     Dim OutMail As Object
     Set OutApp = CreateObject("Outlook.Application")
     Set OutMail = OutApp.CreateItem(0)
-    'mail_to = "xin_yong.yu@siemens.com"
+    
     sSubject = "test auto scheduled mail"
     'sTitle = "Mr."
     'sBody = "Hello world"
     With OutMail
-        .To = mail_to '"xin_yong.yu@siemens.com"
+        .To = mail_to '
         .CC = ""
         .BCC = ""
         .Subject = po & msg '"This is the Subject line"
