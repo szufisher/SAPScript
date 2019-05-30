@@ -1,0 +1,186 @@
+Global SapGuiAuto As Object
+Global SAPApp As Object
+Global SAPCon As Object
+
+Sub zmt1_by_orders()
+     Dim session As Object
+     Dim material As String, revision As String, prod_order As String, sn As String, i As Integer, j As Integer, m As Integer 'handling the prefix 0 when needed
+     Dim header_material As String, header_material_revision As String, header_material_sn As String
+     
+     Set SapGuiAuto = GetObject("SAPGUI")  'Get the SAP GUI Scripting object
+     Set SAPApp = SapGuiAuto.GetScriptingEngine 'Get the currently running SAP GUI
+     SAPApp.AllowSystemMessages = False
+     SAPApp.HistoryEnabled = False  'improve the performance
+     Set SAPCon = SAPApp.Children(0) 'Get the first system that is currently connected
+     Set session = SAPCon.Children(0) 'Get the first session (window) on that connection
+                  
+     lastrow = ActiveSheet.UsedRange.Rows.Count  'first sort by Sales order column
+     Range("i3:k" & lastrow).Clear
+     
+     For i = 3 To lastrow
+        prod_order = Cells(i, 1)
+        header_material = Cells(i, 2)
+        header_material_sn = Cells(i, 3)
+        header_material_revision = Cells(i, 4)
+        If Len(Trim(header_material_revision)) = 1 Then header_material_revision = "0" & header_material_revision
+        If prod_order = "" Then Exit For
+               
+        If header_material_sn_changed(prod_order, header_material, header_material_sn, i - 1) Then
+            order_message = process_one_order(session, i, prod_order, header_material, header_material_sn, _
+                                                          prod_order, header_material, header_material_sn, header_material_revision, 0)
+        End If
+            
+        If header_material_sn_changed(prod_order, header_material, header_material_sn, i + 1) Then Cells(i, 11) = order_message
+    Next i
+    
+    Set session = Nothing
+    Set Connection = Nothing
+    SAPApp.AllowSystemMessages = True
+    SAPApp.HistoryEnabled = True  'improve the performance
+    Set SAPApp = Nothing
+    Set SapGuiAuto = Nothing
+    MsgBox "Process completed"
+
+End Sub
+
+Function process_one_order(session As Object, i As Integer, top_prod_order As String, top_material As String, top_sn As String, _
+    prod_order As String, header_material As String, header_material_sn As String, header_material_revision As String, run_level As Integer)
+    
+    Dim m As Integer, current_material As String, component_sn As String, component_revision As String, component_prod_order As String, new_session As Object
+    
+    lastrow = ActiveSheet.UsedRange.Rows.Count
+    plant = Cells(1, 2)
+    If plant = "" Then plant = "30R3"
+    
+    'session.findById("wnd[0]").resizeWorkingPane 231, 42, False
+    session.findById("wnd[0]/tbar[0]/okcd").Text = "/nzmt1"
+    session.findById("wnd[0]").sendVKey 0   'confirm tcode
+    session.findById("wnd[0]").sendVKey 0   'start anonymous entry
+    session.findById("wnd[0]/usr/txtZMZWS-ZMATNR_O").Text = header_material
+    session.findById("wnd[0]/usr/txtZMZWS-ZSERNR_O").Text = header_material_sn
+    session.findById("wnd[0]/usr/ctxtZMZWS-ZFAUF").Text = prod_order   'subcomponent prod order empty, use standard BOM
+    session.findById("wnd[0]/usr/ctxtZMZWS-ZWERK").Text = plant
+    session.findById("wnd[0]").sendVKey 0
+    If session.findById("wnd[0]/sbar").MessageType = "E" Then
+        process_one_order = session.findById("wnd[0]/sbar").Text
+        Exit Function
+    End If
+    On Error Resume Next
+        session.findById("wnd[1]/tbar[0]/btn[0]").press
+    If session.findById("wnd[0]/sbar").MessageType = "E" Or session.findById("wnd[0]/sbar").MessageType = "A" Then   ' handle error cases
+        process_one_order = session.findById("wnd[0]/sbar").Text
+        Exit Function
+    End If
+    On Error Resume Next              ' in case there is popup window to confirm the alterNAtive BOM used
+        session.findById ("wnd[1]/usr/btnSPOP-OPTION1")
+    If Err.Number = 0 Then            ' in case there are multi BOM available for selection
+        session.findById("wnd[1]/usr/btnSPOP-OPTION1").press
+        On Error Resume Next
+            session.findById ("wnd[1]/usr/sub:ZMTDD000:9116/chkARBE_WERK-AUSWAHL[0,0]")
+        If Err.Number = 0 Then  'select the 1st BOM
+            session.findById("wnd[1]/usr/sub:ZMTDD000:9116/chkARBE_WERK-AUSWAHL[0,0]").Selected = True
+            session.findById("wnd[1]/tbar[0]/btn[0]").press
+        End If
+        On Error Resume Next
+            session.findById ("wnd[1]/tbar[0]/btn[0]")
+        If Err.Number = 0 Then session.findById("wnd[1]/tbar[0]/btn[0]").press
+    End If
+    On Error Resume Next              'Need PO for header material
+        session.findById ("wnd[1]/usr/txtZMZWS-ZBSTNR")
+    If Err.Number = 0 Then
+        Call set_field_value(session.findById("wnd[1]/usr/txtZMZWS-ZBSTNR"), "4503910617", False) '"use one existing PO
+        session.findById("wnd[1]").sendVKey 0
+    End If
+    
+    Call set_field_value(session.findById("wnd[0]/usr/txtES_O"), header_material_revision, False)
+    session.findById("wnd[0]").sendVKey 0
+    
+    changed = False
+    material_not_found = ""
+    For j = 1 To 99 Step 2
+        On Error Resume Next   'if cannot find valid field and even after page down, then reached the final row
+            session.findById ("wnd[0]/usr/sub:ZMTDD000:9110/txtZMZWS-ZSERIALNR[" & CStr(j) & ",15]")
+        If Err.Number <> 0 Then
+            previous_page_1st_sn = session.findById("wnd[0]/usr/sub:ZMTDD000:9110/txtZMZWS-ZSERIALNR[1,15]").Text
+            session.findById("wnd[0]/tbar[0]/btn[82]").press   ' click the next page button
+            If session.findById("wnd[0]/usr/sub:ZMTDD000:9110/txtZMZWS-ZSERIALNR[1,15]").Text = previous_page_1st_sn Then Exit For
+        End If
+        found_material = False
+        current_material = session.findById("wnd[0]/usr/sub:ZMTDD000:9110/txtZMZWS-ZMATNR_U[" & CStr(j - 1) & ",0]").Text
+        For m = i To lastrow
+            If header_material_sn_changed(top_prod_order, top_material, top_sn, m) Then Exit For
+
+            If Cells(m, 9) <> "ZMT1 Input OK" And InStr(1, current_material, Cells(m, 5)) > 0 Then
+                found_material = True
+                component_sn = Cells(m, 6)
+                component_revision = Cells(m, 7)
+                component_prod_order = Cells(m, 8)
+                If Len(Trim(component_revision)) = 1 Then component_revision = "0" & component_revision
+                Cells(m, 9) = "ZMT1 Input OK"
+                Exit For
+            End If
+        Next m
+        
+        If found_material = True Then
+            session.findById("wnd[0]/usr/sub:ZMTDD000:9110/chkZMZWS-ZFEHLT_KZ[" & CStr(j) & ",1]").Selected = False
+            Call set_field_value(session.findById("wnd[0]/usr/sub:ZMTDD000:9110/txtZMZWS-ZSERIALNR[" & CStr(j) & ",15]"), component_sn, False)
+            session.findById("wnd[0]").sendVKey 0
+            Call set_field_value(session.findById("wnd[0]/usr/sub:ZMTDD000:9110/txtZMZWS-ZES[" & CStr(j) & ",50]"), component_revision, False)
+            'Call set_field_value(session.findById("wnd[0]/usr/sub:ZMTDD000:9110/txtZMZWS-ZBSTNR[" & CStr(j) & ",86]"), "4503910617", False)
+            'Call set_field_value(session.findById("wnd[0]/usr/sub:ZMTDD000:9110/txtZMZWS-ZGEW_BEGINN[" & CStr(j) & ",98]"), "250519", False)
+            session.findById("wnd[0]").sendVKey 0
+            If session.findById("wnd[0]/sbar").MessageType = "W" Then session.findById("wnd[0]").sendVKey 0
+            
+            StatusText = session.findById("wnd[0]/sbar").Text
+            If InStr(1, StatusText, "enter subitems") > 0 Then
+                run_level = run_level + 1
+                If SAPCon.Sessions.Count <= run_level Then session.SendCommand ("/os000")
+                Set new_session = SAPCon.Sessions(CInt(run_level))
+                order_message = process_one_order(new_session, i, top_prod_order, top_material, top_sn, component_prod_order, current_material, component_sn, component_revision, run_level)
+                Cells(m, 11) = order_message
+                session.findById("wnd[0]").sendVKey 0
+            End If
+            
+            If Cells(m, 10) = "" Then
+                Cells(m, 10) = session.findById("wnd[0]/sbar").Text
+            Else
+                Cells(m, 10) = Cells(m, 10) & vbCrLf & session.findById("wnd[0]/sbar").Text
+            End If
+            
+            If session.findById("wnd[0]/sbar").MessageType = "E" Or session.findById("wnd[0]/sbar").MessageType = "A" Then  'ignore the error item by Tick item
+                session.findById("wnd[0]/usr/sub:ZMTDD000:9110/chkZMZWS-ZFEHLT_KZ[" & CStr(j) & ",1]").Selected = True
+                Call set_field_value(session.findById("wnd[0]/usr/sub:ZMTDD000:9110/txtZMZWS-ZSERIALNR[" & CStr(j) & ",15]"), "", True)
+                Call set_field_value(session.findById("wnd[0]/usr/sub:ZMTDD000:9110/txtZMZWS-ZES[" & CStr(j) & ",50]"), "", True)
+                Call set_field_value(session.findById("wnd[0]/usr/sub:ZMTDD000:9110/txtZMZWS-ZBSTNR[" & CStr(j) & ",86]"), "", True)
+                Call set_field_value(session.findById("wnd[0]/usr/sub:ZMTDD000:9110/txtZMZWS-ZGEW_BEGINN[" & CStr(j) & ",98]"), "", True)
+                session.findById("wnd[0]").sendVKey 0
+            Else
+                changed = True
+            End If
+        Else
+            If material_not_found = "" Then
+                material_not_found = current_material
+            Else
+                material_not_found = material_not_found & vbCrLf & current_material
+            End If
+        End If
+    Next j
+    
+    If changed = True Then   'finally SAVE
+        Status = session.findById("wnd[0]/usr/txtZMAUF-ZSTATUS").Text
+        session.findById("wnd[0]/tbar[0]/btn[11]").press
+        process_one_order = session.findById("wnd[1]").PopupDialogText
+        session.findById("wnd[1]").Close
+    Else
+        process_one_order = "order not changed due to item errors"
+    End If
+    If material_not_found <> "" Then process_one_order = process_one_order & ",these materials not found in Excel:" & material_not_found
+End Function
+
+Sub set_field_value(field As Object, value As String, force As Boolean)
+    If field.changeable = True And (force = True Or value <> "") Then field.Text = value
+End Sub
+
+Function header_material_sn_changed(prod_order As String, material As String, sn As String, row_no As Integer)
+    header_material_sn_changed = Not (Cells(row_no, 1) = prod_order And Cells(row_no, 2) = material And Cells(row_no, 3) = sn)
+End Function
