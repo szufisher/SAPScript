@@ -1,6 +1,48 @@
+guideline
+1. make sure the scanned barcode data is stored in the first worksheet of the currently open workbook
+    with the Production order as column header in A column(on row 1 till 5 is OK)
+2. click the Extract Scanned Data button will retrieve all scanned data from open workbook meeting the above mentioned criteria 
+3. click upload will batch input all the SN into ZMT1 with all the system feedback message in column I, J, K
+
+
 Global SapGuiAuto As Object
 Global SAPApp As Object
 Global SAPCon As Object
+
+Function Col_Letter(lngCol As Long) As String
+    Dim vArr
+    vArr = Split(Cells(1, lngCol).Address(True, False), "$")
+    Col_Letter = vArr(0)
+End Function
+
+Sub copy_to_template()
+    Dim wb As Workbook, ws As Worksheet, cur_sheet As Worksheet, k As Long
+    cur_row = ActiveSheet.UsedRange.Rows.Count
+    
+    Set cur_sheet = ActiveSheet
+    cur_workbook_name = ActiveWorkbook.FullName
+    
+    For Each wb In Application.Workbooks
+      If wb.FullName <> cur_workbook_name Then
+          Set ws = wb.Worksheets(1)
+          For i = 1 To 5
+             If ws.Cells(i, 1) = "Production order" Then
+                last_row = ws.UsedRange.Rows.Count
+                last_col = ws.UsedRange.Columns.Count
+                For j = i + 1 To last_row
+                    For k = 5 To last_col Step 3
+                        strRng = "A" & j & ":D" & j & "," & Col_Letter(k) & j & ":" & Col_Letter(k + 2) & j
+                        cur_row = cur_row + 1
+                        ws.Range(strRng).Copy Destination:=cur_sheet.Cells(cur_row, 1)
+                    Next k
+                Next j
+    
+                Exit For
+             End If
+          Next i
+      End If
+    Next wb
+End Sub
 
 Sub zmt1_by_orders()
      Dim session As Object
