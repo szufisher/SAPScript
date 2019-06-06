@@ -1,0 +1,138 @@
+   Global SapGuiAuto As Object
+   Global Connection As Object
+   Global session As Object
+Sub MIGO()
+    Set SapGuiAuto = GetObject("SAPGUI")  'Get the SAP GUI Scripting object
+    Set SAPApp = SapGuiAuto.GetScriptingEngine 'Get the currently running SAP GUI
+    SAPApp.AllowSystemMessages = False
+    SAPApp.HistoryEnabled = False  'improve the performance
+    Set SAPCon = SAPApp.Children(0) 'Get the first system that is currently connected
+    Set session = SAPCon.Children(0) 'Get the first session (window) on that connection
+    dummy = session.LockSessionUI()
+    Application.Interactive = False
+    
+    Dim sht As Worksheet, item_table As Object, cur_row As Object, ii As Integer
+    'material_slip = Trim(CStr(Sheets("Orders To Be Processed").Cells(i, 2).Value))
+    'header_text = Trim(CStr(Sheets("Orders To Be Processed").Cells(i, 3).Value))
+
+    session.findById("wnd[0]").maximize
+    'session.findById("wnd[0]").iconify
+    session.findById("wnd[0]/tbar[0]/okcd").Text = "/nmigo"
+    session.findById("wnd[0]").sendVKey 0
+        
+    session.findById("wnd[0]/usr").FindByNameEx("GODYNPRO-ACTION", 34).Key = "A08" 'transfer
+    session.findById("wnd[0]/usr/").FindByNameEx("GODYNPRO-REFDOC", 34).Key = "R10"  ' other
+    If session.findById("wnd[0]/usr").FindByNameEx("GODEFAULT_TV-BWART", 32).Text <> "311" Then
+        session.findById("wnd[0]/usr").FindByNameEx("GODEFAULT_TV-BWART", 32).Text = "311"    'movement type
+    End If
+    session.findById("wnd[0]").sendVKey 0
+    
+    If session.findById("wnd[0]/sbar").MessageType = "E" Then
+        sht.Cells(i, 10) = session.findById("wnd[0]/sbar").Text
+        Exit Sub
+    End If
+    
+    If session.ActiveWindow.Name = "wnd[1]" Then session.findById("wnd[1]").Close
+        
+    session.SendCommand ("MIGO_OK_HEADER_OPEN")
+    session.findById("wnd[0]/usr").FindByNameEx("GOHEAD-MTSNR", 31).Text = material_slip
+    'session.findById("wnd[0]/usr").FindByNameEx("GOHEAD-BKTXT", 31).Text = header_text
+    session.SendCommand ("MIGO_OK_HEADER_CLOSE")
+    session.SendCommand ("MIGO_OK_DETAIL_CLOSE")
+    pagesize = session.findById("wnd[0]/usr").FindByNameEx("SAPLMIGOTV_GOITEM", 80).verticalScrollbar.pagesize
+    session.findById("wnd[0]/usr").FindByNameEx("SAPLMIGOTV_GOITEM", 80).verticalScrollbar.Position = 0
+    
+    Set sht = Sheets("Transfer")
+    last_row = sht.UsedRange.Rows.Count
+    CurrentRow = 0  'the initial starting row on the 1st page
+    For i = 2 To last_row
+        j = i - 1
+        material = sht.Cells(i, 1).Text
+        quantity = sht.Cells(i, 2).Text
+        from_location = sht.Cells(i, 3).Text
+        to_location = sht.Cells(i, 4).Text
+        special_stock = sht.Cells(i, 5).Text
+        vendor = sht.Cells(i, 6).Text
+        plant = "30R1"
+        If material = "" Then Exit For
+        pageindex = j Mod pagesize
+        If i > 2 And (j <= (pagesize + 1) And pageindex = 1) Or (j > pagesize And pageindex = 0) Then
+            session.findById("wnd[0]/tbar[0]/btn[82]").press   ' click the next page button
+            CurrentRow = 0   'for newly input, from next page start from 1 other than 0
+        End If
+        If i > 2 Then CurrentRow = CurrentRow + 1   'start from 2nd page, the starting input row is at 2nd(index 1)
+        
+        Set cur_row = session.findById("wnd[0]/usr").FindByNameEx("SAPLMIGOTV_GOITEM", 80).Rows(CurrentRow)
+        col_count = 0
+        material_assigned = False
+        special_stock_assigned = False
+        For ii = 0 To cur_row.Count - 1     'get the col index due to different user settings, different per row due to some field value such as special stock
+            col_count = col_count + 1
+            If cur_row(ii + 0).Name = "GOITEM-MAKTX" And material_assigned = False Then
+                material_assigned = True
+                cur_row(ii + 0).Text = material
+            ElseIf cur_row(ii + 0).Name = "GOITEM-TAKE_IT" Then
+                cur_row(ii + 0).Selected = True
+            ElseIf cur_row(ii + 0).Name = "GOITEM-ERFMG" Then
+                cur_row(ii + 0).Text = quantity
+            ElseIf cur_row(ii + 0).Name = "GOITEM-LGOBE" Then
+                cur_row(ii + 0).Text = from_location
+            ElseIf cur_row(ii + 0).Name = "GOITEM-NAME1" Then
+                cur_row(ii + 0).Text = plant
+            ElseIf cur_row(ii + 0).Name = "GOITEM-SOBKZ" And special_stock_assigned = False Then
+                special_stock_assigned = True
+                cur_row(ii + 0).Text = special_stock
+                If special_stock <> "" Then
+                    session.findById("wnd[0]").sendVKey 0
+                    Set cur_row = session.findById("wnd[0]/usr").FindByNameEx("SAPLMIGOTV_GOITEM", 80).Rows(CurrentRow)
+                End If
+            ElseIf cur_row(ii + 0).Name = "GOITEM-MAT_VENDORNAME" Then
+                cur_row(ii + 0).Text = vendor
+            ElseIf cur_row(ii + 0).Name = "GOITEM-UMLGOBE" Then
+                cur_row(ii + 0).Text = to_location
+            Else
+                col_count = col_count - 1
+            End If
+            If col_count > 7 Then Exit For
+        Next ii
+        Set cur_row = Nothing
+    Next i
+    
+    session.findById("wnd[0]/tbar[0]/btn[11]").press   'save
+    MessageType = session.findById("wnd[0]/sbar").MessageType
+    If MessageType = "W" Then
+        session.findById("wnd[0]").sendVKey 0
+    End If
+    On Error Resume Next   'get the popup error message window content which only triggerred when SAVE or Check the whole document
+       session.findById ("wnd[1]/tbar[0]/btn[0]")
+    If Err.Number = 0 Then
+       session.findById("wnd[1]/tbar[0]/btn[18]").press   'hide info message
+       session.findById("wnd[1]/tbar[0]/btn[19]").press   'hide warning message
+       On Error Resume Next
+            session.findById ("wnd[1]/usr/lbl[5,3]")
+       If Err.Number = 0 Then
+           error_result = "item:" + session.findById("wnd[1]/usr/lbl[5,3]").Text + " with error: " + session.findById("wnd[1]/usr/lbl[10,3]").Text
+       End If
+       session.findById("wnd[1]/tbar[0]/btn[0]").press
+    End If
+    result = session.findById("wnd[0]/sbar").Text
+    
+    If InStr(result, "Material document ") > 0 Then  'Material document 5014695540 posted
+        status_strings = Split(result, " ")
+        material_document = status_strings(UBound(status_strings) - 1)
+        sht.Cells(last_row + 2, 1).Value = "Document Status:" & result
+    Else
+        sht.Cells(last_row + 2, 1).Value = "Document Status:" & "failed reason:" & result + " " + error_result
+    End If
+    
+    Application.Interactive = True
+    Set material_stock = Nothing
+    SAPApp.HistoryEnabled = True  'improve the performance
+    dummy = session.UnlockSessionUI()
+    Set session = Nothing
+    Set Connection = Nothing
+    Set SAPApp = Nothing
+    Set SapGuiAuto = Nothing
+    'Application.ScreenUpdating = True
+    MsgBox "Process Completed"
+End Sub
