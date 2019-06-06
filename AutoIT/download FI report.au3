@@ -16,6 +16,10 @@ If (Not @error) And IsObj($oExcelDoc) Then ; Check again If everything went well
    Local $CellRange = "B2:J" & $number_rows
    Local $oDocument = $oExcelDoc.Worksheets(1) ; We use the 'Default' worksheet
    Local $cells = $oDocument.range($CellRange).value
+   $oDocument = 0
+   $oExcelDoc.saved = 1 ; Prevent questions from excel to save the file
+   $oExcelDoc.close ; Get rid of Excel.
+   $oExcelDoc = 0
 
    If IsArray($cells) And UBound($cells, 0) > 0 Then
 	   For $x = 0 To UBound($cells, 1) - 1
@@ -47,11 +51,7 @@ If (Not @error) And IsObj($oExcelDoc) Then ; Check again If everything went well
 		 _SAPObjValueSet("usr/ctxt$HY-COBJ",$cost_object)
 		 _SAPObjValueSet("usr/txt$HY-PERI", $end_period)
 		 _SAPVKeysSend("F8")
-		 ;WinWait("SODOCO","",2)
-		 ;If WinExists("SODOCO") Then
-		 ;	Send("!+{F4}",0)
-			;WinClose("SODOCO")
-		 ;EndIf
+
 		 MouseClick($MOUSE_CLICK_LEFT, 100, 185, 2)
 		 Sleep(18000)
 		 MouseClick($MOUSE_CLICK_LEFT,294,154)
@@ -60,18 +60,17 @@ If (Not @error) And IsObj($oExcelDoc) Then ; Check again If everything went well
 
 		 Local $hSaveAsDlg=WinWaitActive("Save As","",5)
 		 If $hSaveAsDlg <>0 then
-			ControlSend($hSaveAsDlg,"","[CLASS:Edit; INSTANCE:1]","^n")  ;alt+n place cursor to filename edit box
-			ControlSend($hSaveAsDlg,"","[CLASS:Edit; INSTANCE:1]", $save_file)			
-			Sleep(1000)
+			ControlSend($hSaveAsDlg,"","[CLASS:Edit; INSTANCE:1]","!n")  ;alt+n place cursor to filename edit box
+			ControlSetText($hSaveAsDlg,"","[CLASS:Edit; INSTANCE:1]", $save_file)			
+			Sleep(2000)  ; wait to swith the target folder, otherwise excel open error
 			ControlClick($hSaveAsDlg,"","&Save")
+			Sleep(2000)
 		 Else
 			MsgBox($MB_SYSTEMMODAL, "Save As Dialog", "Error:Failed activate Save As Popup window" )
 		 EndIf
 	  Next
    EndIf
-   ;$oExcelDoc.saved = 1 ; Prevent questions from excel to save the file
+
 Else
 	MsgBox($MB_SYSTEMMODAL, "Excel Data Test", "Error: Could Not open " & $FileName & " as an Excel Object.")
 EndIf
-;$oExcelDoc.close ; Get rid of Excel.
-$oExcelDoc = 0
