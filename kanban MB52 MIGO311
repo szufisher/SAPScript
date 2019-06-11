@@ -1,0 +1,448 @@
+Global session As Object
+Global SAPApp As Object
+
+Sub open_sap()
+    If session Is Nothing Then
+        Set SapGuiAuto = GetObject("SAPGUI")  'Get the SAP GUI Scripting object
+        Set SAPApp = SapGuiAuto.GetScriptingEngine 'Get the currently running SAP GUI
+        Set SAPCon = SAPApp.Children(0) 'Get the first system that is currently connected
+        Set session = SAPCon.Children(0) 'Get the first session (window) on that connection
+    End If
+End Sub
+
+Sub close_sap()
+    If Not SAPApp Is Nothing Then
+        Set session = Nothing
+        Set SAPCon = Nothing
+        Set SAPApp = Nothing
+        Set SapGuiAuto = Nothing
+        MsgBox "Process Completed"
+    End If
+End Sub
+
+Sub kanban_process()
+    Dim wbk As Workbook
+    Dim wbk1 As Workbook
+    Dim Filename As String
+    Dim Path As String
+    Application.ScreenUpdating = False
+    Application.DisplayAlerts = False
+    'initialize
+    Set wbk1 = ThisWorkbook
+    Set sht_kanban = wbk1.Sheets("KANBAN")
+    Set sht_kanban_master = wbk1.Sheets("KANBAN Master Data")
+    last_row_kanban = sht_kanban.UsedRange.Rows.Count
+    last_row_kanban_master = sht_kanban_master.UsedRange.Rows.Count
+    If last_row_kanban > 1 Then sht_kanban.Range("a2:y" & last_row_kanban).Clear
+    sht_kanban_master.Range("a2:y" & last_row_kanban_master).Copy Destination:=sht_kanban.Cells(2, 1)
+    last_row_kanban = sht_kanban.UsedRange.Rows.Count
+    
+    Call open_sap
+    session.findById("wnd[0]").maximize
+    session.findById("wnd[0]/tbar[0]/okcd").Text = "/nmb52"
+    session.findById("wnd[0]").sendVKey 0
+    
+    Range("A2:A" + CStr(last_row_kanban)).Select   'material
+    Selection.Copy
+    session.findById("wnd[0]/usr/btn%_MATNR_%_APP_%-VALU_PUSH").press
+    session.findById("wnd[1]/tbar[0]/btn[16]").press   'delete previous input
+    session.findById("wnd[1]/tbar[0]/btn[24]").press
+    session.findById("wnd[1]/tbar[0]/btn[8]").press
+    session.findById("wnd[0]/usr/ctxtWERKS-LOW").Text = "30r1"
+    'Range("F2:F" + CStr(last_row)).Select   'storage location
+    'Selection.Copy
+    session.findById("wnd[0]/usr/btn%_LGORT_%_APP_%-VALU_PUSH").press
+    session.findById("wnd[1]/tbar[0]/btn[16]").press   'delete previous input
+    session.findById("wnd[1]/usr/tabsTAB_STRIP/tabpSIVA/ssubSCREEN_HEADER:SAPLALDB:3010/tblSAPLALDBSINGLE/ctxtRSCSEL_255-SLOW_I[1,0]").Text = "R001"
+    session.findById("wnd[1]/usr/tabsTAB_STRIP/tabpSIVA/ssubSCREEN_HEADER:SAPLALDB:3010/tblSAPLALDBSINGLE/ctxtRSCSEL_255-SLOW_I[1,1]").Text = "R023"
+    'session.findById("wnd[1]/tbar[0]/btn[24]").press
+    session.findById("wnd[1]/tbar[0]/btn[8]").press
+    
+    session.findById("wnd[0]/usr/chkPA_SOND").Selected = True
+    session.findById("wnd[0]/usr/ctxtSO_SOBKZ-LOW").Text = "k"
+    session.findById("wnd[0]/usr/chkNOZERO").Selected = True
+    session.findById("wnd[0]/usr/chkNOVALUES").Selected = True
+    session.findById("wnd[0]/tbar[1]/btn[8]").press
+    
+    session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell").selectedRows = "0"
+    session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell").contextMenu
+    session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell").selectContextMenuItem "&XXL"
+    On Error Resume Next
+    session.findById("wnd[1]/usr/radRB_OTHERS").Select
+    session.findById("wnd[1]/usr/cmbG_LISTBOX").Key = "10"
+    session.findById("wnd[1]/tbar[0]/btn[0]").press
+    session.findById("wnd[1]/tbar[0]/btn[0]").press
+    session.findById("wnd[1]/tbar[0]/btn[0]").press
+    'Path = Sheets(2).Cells(2, 2) '"D:\test\"
+    Filename = "MB52" & "_" & Replace(CStr(CDbl(Now())), ".", "") & ".xlsx"
+    For ii = 1 To 10
+        On Error Resume Next
+            Path = session.findById("wnd[1]/usr/ctxtDY_PATH").Text   '"d:\sap_upload\"
+            session.findById("wnd[1]/usr/ctxtDY_FILENAME").Text = Filename  '"book1.xlsx"
+        If Err.Number <> 0 Then
+            Application.Wait (Now + TimeValue("0:00:01"))
+        Else
+            Exit For
+        End If
+    Next ii
+    session.findById("wnd[1]/tbar[0]/btn[0]").press
+    If Right(Path, 1) <> "\" Then Path = Path + "\"
+    Set wbk = Workbooks.Open(Filename:=Path & Filename, ReadOnly:=True)
+    'If Err.Number <> 0 Then Set wbk = Workbooks.Open(Path & Filename)
+    Set sht = wbk.Sheets(1)
+    last_col = sht.UsedRange.Columns.Count  'extract the unrestricted stock quantity only
+    last_row = sht.UsedRange.Rows.Count
+    col_count = 0
+    For i = 1 To last_col
+        If sht.Cells(1, i).Text = "Material" Then
+            col_material = i
+            col_count = col_count + 1
+        ElseIf sht.Cells(1, i).Text = "Storage Location" Then
+            col_location = i
+            col_count = col_count + 1
+        ElseIf sht.Cells(1, i).Text = "Unrestricted" Then
+            col_available_qty = i
+            col_count = col_count + 1
+        ElseIf sht.Cells(1, i).Text = "Special stock number" Then
+            col_special_stock = i
+            col_count = col_count + 1
+        End If
+        If col_count >= 4 Then Exit For
+    Next i
+    If col_count < 4 Then
+        MsgBox "Default MB52 layout should include at least 4 mandatory fields: material,Special stock number,storage location, unrestricted"
+        Exit Sub
+    End If
+    
+    For j = 2 To last_row
+        For k = 2 To last_row_kanban
+            If sht_kanban.Cells(k, 1).Text = sht.Cells(j, col_material).Text Then
+                If sht_kanban.Cells(k, 11).Text = sht.Cells(j, col_location).Text Then
+                    sht_kanban.Cells(k, 19) = add_qty(sht_kanban.Cells(k, 19), sht.Cells(j, col_available_qty))
+                    Exit For
+                ElseIf sht_kanban.Cells(k, 12).Text = sht.Cells(j, col_location).Text Then
+                    sht_kanban.Cells(k, 20) = add_qty(sht_kanban.Cells(k, 20), sht.Cells(j, col_available_qty))
+                    sht_kanban.Cells(k, 26) = add_qty_spec(sht_kanban.Cells(k, 26), sht.Cells(j, col_special_stock), sht.Cells(j, col_available_qty))
+                    Exit For
+                End If
+            End If
+        Next k
+    Next j
+    For k = 2 To last_row_kanban
+        lineside_stock_qty = sht_kanban.Cells(k, 19)
+        main_stock_qty = sht_kanban.Cells(k, 20)
+        max_qty = sht_kanban.Cells(k, 15)
+        min_qty = sht_kanban.Cells(k, 14)
+        required_replenish_qty = 0
+        available_replenish_qty = 0
+        confirm_to_be_replenish = ""
+        short_qty = 0
+        If lineside_stock_qty <= min_qty Then
+            required_replenish_qty = max_qty - lineside_stock_qty
+            If main_stock_qty < required_replenish_qty Then
+                available_replenish_qty = main_stock_qty
+                short_qty = required_replenish_qty - available_replenish_qty
+            Else
+                available_replenish_qty = required_replenish_qty
+            End If
+            confirm_to_be_replenish = "y"
+        End If
+        sht_kanban.Cells(k, 22) = required_replenish_qty
+        sht_kanban.Cells(k, 23) = confirm_to_be_replenish
+        sht_kanban.Cells(k, 24) = short_qty
+        sht_kanban.Cells(k, 25) = available_replenish_qty
+    Next k
+    
+    wbk1.Activate
+    Call SendEmail
+    wbk.Close SaveChanges:=False
+    Call close_sap
+    Application.DisplayAlerts = True
+    Application.ScreenUpdating = True
+End Sub
+
+Function add_qty(x, y)
+    If x = "" Then x = 0
+    add_qty = x + y
+End Function
+
+Function add_qty_spec(x, y, z)
+    spec = y & "," & CStr(z)
+    If x = "" Then
+        add_qty_spec = spec
+    Else
+        add_qty_spec = x & ";" & spec
+    End If
+End Function
+
+Sub SendEmail()
+    Dim ws As Worksheet
+    Dim sMail_to As String
+    Dim SendingRng As Range
+    
+    Set ws = Nothing
+    
+    On Error Resume Next
+        Set ws = Sheets("mail_template")
+    If Err.Number = 0 Then
+        ws.Cells.Clear
+    Else
+        Set ws = Sheets.Add(After:=Sheets(Sheets.Count))
+        ws.Name = "mail_template"
+    End If
+    'ws.Select
+    ws.Cells(1, 1) = "Material"
+    ws.Cells(1, 2) = "Description"
+    ws.Cells(1, 3) = "MRP Controller"
+    ws.Cells(1, 4) = "Short Qty"
+    i = 2
+    For j = 2 To Sheets("KANBAN").UsedRange.Rows.Count
+        If Sheets("KANBAN").Cells(j, 24) > 0 Then
+            ws.Cells(i, 1) = Sheets("KANBAN").Cells(j, 1)
+            ws.Cells(i, 2) = Sheets("KANBAN").Cells(j, 2)
+            ws.Cells(i, 3) = Sheets("KANBAN").Cells(j, 13)
+            ws.Cells(i, 4) = Sheets("KANBAN").Cells(j, 24)
+            i = i + 1
+            If InStr(1, sMail_to, Sheets("KANBAN").Cells(i, 13)) = 0 Then
+                If sMail_to = "" Then
+                    sMail_to = Sheets("KANBAN").Cells(i, 13)
+                Else
+                    sMail_to = sMail_to & ";" & Sheets("KANBAN").Cells(i, 13).Text
+                End If
+            End If
+        End If
+    Next j
+    If i = 2 Then Exit Sub   ' no mail need to be sent
+    On Error GoTo StopMacro
+    With Application
+        .ScreenUpdating = False
+        .EnableEvents = False
+    End With
+    ws.Select
+    ws.Range("A:D").EntireColumn.AutoFit
+    Set SendingRng = ws.Range("A1:d" & ActiveSheet.UsedRange.Rows.Count)
+    SendingRng.Borders.LineStyle = xlContinuous
+    With SendingRng
+        .Parent.Select
+        .Select
+        ActiveWorkbook.EnvelopeVisible = True ' Create the mail and send it
+        With .Parent.MailEnvelope
+            .Introduction = "Please follow up and make sure the below material available ASAP."
+            With .Item
+                .To = sMail_to
+                .CC = ""
+                .BCC = ""
+                .Subject = "Kanban material short quantity reminder"
+                .Send
+            End With
+        End With
+    End With
+StopMacro:
+    With Application
+        .ScreenUpdating = True
+        .EnableEvents = True
+    End With
+    ActiveWorkbook.EnvelopeVisible = False
+    Sheets("KANBAN").Select
+End Sub
+
+Sub migo()
+    Call MIGO_311(14, 19)
+End Sub
+
+Sub MIGO_311(start_row, end_row)
+    If session Is Nothing Then Call open_sap
+    'Application.Interactive = False
+    
+    Dim sht As Worksheet, item_table As Object, cur_row As Object, ii As Integer
+    Set sht = Sheets("Replenish History")
+    last_row = sht.UsedRange.Rows.Count
+    
+    session.findById("wnd[0]").maximize
+    'session.findById("wnd[0]").iconify
+    session.findById("wnd[0]/tbar[0]/okcd").Text = "/nmigo"
+    session.findById("wnd[0]").sendVKey 0
+        
+    session.findById("wnd[0]/usr").FindByNameEx("GODYNPRO-ACTION", 34).Key = "A08" 'transfer
+    session.findById("wnd[0]/usr/").FindByNameEx("GODYNPRO-REFDOC", 34).Key = "R10"  ' other
+    If session.findById("wnd[0]/usr").FindByNameEx("GODEFAULT_TV-BWART", 32).Text <> "311" Then
+        session.findById("wnd[0]/usr").FindByNameEx("GODEFAULT_TV-BWART", 32).Text = "311"    'movement type
+    End If
+    session.findById("wnd[0]").sendVKey 0
+    
+    If session.findById("wnd[0]/sbar").MessageType = "E" Then
+        sht.Cells(i, 10) = session.findById("wnd[0]/sbar").Text
+        Exit Sub
+    End If
+    
+    If session.ActiveWindow.Name = "wnd[1]" Then session.findById("wnd[1]").Close
+        
+    session.SendCommand ("MIGO_OK_HEADER_OPEN")
+    session.findById("wnd[0]/usr").FindByNameEx("GOHEAD-MTSNR", 31).Text = sht.Cells(start_row, 2).Text 'work_station 'material_slip
+    'session.findById("wnd[0]/usr").FindByNameEx("GOHEAD-BKTXT", 31).Text = header_text
+    session.SendCommand ("MIGO_OK_HEADER_CLOSE")
+    session.SendCommand ("MIGO_OK_DETAIL_CLOSE")
+    pagesize = session.findById("wnd[0]/usr").FindByNameEx("SAPLMIGOTV_GOITEM", 80).verticalScrollbar.pagesize
+    session.findById("wnd[0]/usr").FindByNameEx("SAPLMIGOTV_GOITEM", 80).verticalScrollbar.Position = 0
+        
+    CurrentRow = 0  'the initial starting row on the 1st page
+    offset = start_row - 1
+    For i = 1 To (end_row - start_row + 1)
+        rowno = i + offset
+        If sht.Cells(rowno, 9) <> "" Then GoTo next_record
+        material = sht.Cells(rowno, 3).Text
+        quantity = sht.Cells(rowno, 4).Text
+        from_location = sht.Cells(rowno, 5).Text
+        to_location = sht.Cells(rowno, 6).Text
+        special_stock = sht.Cells(rowno, 7).Text
+        vendor = sht.Cells(rowno, 8).Text
+        plant = "30R1"
+        If material = "" Then Exit For
+        pageindex = j Mod pagesize
+        If i > 1 And (i <= (pagesize + 1) And pageindex = 1) Or (i > pagesize And pageindex = 0) Then
+            session.findById("wnd[0]/tbar[0]/btn[82]").press   ' click the next page button
+            CurrentRow = 0   'for newly input, from next page start from 1 other than 0
+        End If
+        
+        If i = 1 Then
+            CurrentRow = 0
+        Else
+            CurrentRow = CurrentRow + 1  'start from 2nd page, the starting input row is at 2nd(index 1)
+        End If
+        
+        Set cur_row = session.findById("wnd[0]/usr").FindByNameEx("SAPLMIGOTV_GOITEM", 80).Rows(CurrentRow)
+        col_count = 0
+        material_assigned = False
+        special_stock_assigned = False
+        For ii = 0 To cur_row.Count - 1     'get the col index due to different user settings, different per row due to some field value such as special stock
+            col_count = col_count + 1
+            If cur_row(ii + 0).Name = "GOITEM-MAKTX" And material_assigned = False Then
+                material_assigned = True
+                cur_row(ii + 0).Text = material
+            ElseIf cur_row(ii + 0).Name = "GOITEM-TAKE_IT" Then
+                cur_row(ii + 0).Selected = True
+            ElseIf cur_row(ii + 0).Name = "GOITEM-ERFMG" Then
+                cur_row(ii + 0).Text = quantity
+            ElseIf cur_row(ii + 0).Name = "GOITEM-LGOBE" Then
+                cur_row(ii + 0).Text = from_location
+            ElseIf cur_row(ii + 0).Name = "GOITEM-NAME1" Then
+                cur_row(ii + 0).Text = plant
+            ElseIf cur_row(ii + 0).Name = "GOITEM-SOBKZ" And special_stock_assigned = False Then
+                special_stock_assigned = True
+                cur_row(ii + 0).Text = special_stock
+                If special_stock <> "" Then
+                    session.findById("wnd[0]").sendVKey 0
+                    Set cur_row = session.findById("wnd[0]/usr").FindByNameEx("SAPLMIGOTV_GOITEM", 80).Rows(CurrentRow)
+                End If
+            ElseIf cur_row(ii + 0).Name = "GOITEM-MAT_VENDORNAME" Then
+                cur_row(ii + 0).Text = vendor
+            ElseIf cur_row(ii + 0).Name = "GOITEM-UMLGOBE" Then
+                cur_row(ii + 0).Text = to_location
+            Else
+                col_count = col_count - 1
+            End If
+            If col_count > 7 Then Exit For
+        Next ii
+        Set cur_row = Nothing
+next_record:
+    Next i
+    
+    session.findById("wnd[0]/tbar[0]/btn[11]").press   'save
+    MessageType = session.findById("wnd[0]/sbar").MessageType
+    If MessageType = "W" Then
+        session.findById("wnd[0]").sendVKey 0
+    End If
+    On Error Resume Next   'get the popup error message window content which only triggerred when SAVE or Check the whole document
+       session.findById ("wnd[1]/tbar[0]/btn[0]")
+    If Err.Number = 0 Then
+       session.findById("wnd[1]/tbar[0]/btn[18]").press   'hide info message
+       session.findById("wnd[1]/tbar[0]/btn[19]").press   'hide warning message
+       On Error Resume Next
+            session.findById ("wnd[1]/usr/lbl[5,3]")
+       If Err.Number = 0 Then
+           error_result = "item:" + session.findById("wnd[1]/usr/lbl[5,3]").Text + " with error: " + session.findById("wnd[1]/usr/lbl[10,3]").Text
+       End If
+       session.findById("wnd[1]/tbar[0]/btn[0]").press
+    End If
+    Result = session.findById("wnd[0]/sbar").Text
+    
+    If InStr(Result, "Material document ") > 0 Then  'Material document 5014695540 posted
+        status_strings = Split(Result, " ")
+        material_document = status_strings(UBound(status_strings) - 1)
+        msg = "Document Status:" & Result
+    Else
+        msg = "Document Status:" & "failed reason:" & Result + " " + error_result
+    End If
+    For k = end_row To start_row Step -1
+        If sht.Cells(k, 9).Value = "" Then sht.Cells(k, 9).Value = msg
+    Next k
+    
+    'Application.Interactive = True
+    Call close_sap
+    'Application.ScreenUpdating = True
+End Sub
+
+Sub replenish()
+    Dim sht_kanban As Worksheet, sht_replenish As Worksheet
+    
+    Set sht_kanban = Sheets("KANBAN")
+    Set sht_replenish = Sheets("Replenish History")
+    sht_kanban_row_count = sht_kanban.UsedRange.Rows.Count
+    sht_replenish_row_count = sht_replenish.UsedRange.Rows.Count
+    workstation = sht_kanban.Cells(2, 8)
+    
+    j = sht_replenish_row_count + 1
+    start_row = j
+    For i = 2 To sht_kanban_row_count
+        If workstation = "" Then Exit For
+        If sht_kanban.Cells(i, 8) = workstation Then
+            If sht_kanban.Cells(i, 23) <> "" Then   'confirm to be replenished
+                lineside_stock_qty = sht_kanban.Cells(i, 19)
+                main_stock_qty = sht_kanban.Cells(i, 20)
+                max_qty = sht_kanban.Cells(i, 15)
+                available_replenish_qty = sht_kanban.Cells(i, 25)
+                If available_replenish_qty = 0 Then
+                    If max_qty > lineside_stock_qty Then
+                        required_replenish_qty = max_qty - lineside_stock_qty
+                        If main_stock_qty < required_replenish_qty Then
+                            available_replenish_qty = main_stock_qty
+                        Else
+                            available_replenish_qty = required_replenish_qty
+                        End If
+                    End If
+                End If
+                If available_replenish_qty > 0 Then
+                    arr_qty_spec = Split(sht_kanban.Cells(i, 26), ";")
+                    allocated_stock_qty = 0
+                    For k = 0 To UBound(arr_qty_spec)
+                        qty_spec = arr_qty_spec(k)
+                        special_stock = Split(qty_spec, ",")(0)
+                        qty = Split(qty_spec, ",")(1)
+                        If qty > (available_replenish_qty - allocated_stock_qty) Then
+                            qty = available_replenish_qty - allocated_stock_qty
+                            allocated_stock_qty = allocated_stock_qty + qty
+                        End If
+                        sht_replenish.Cells(j, 1) = Now
+                        sht_replenish.Cells(j, 2) = workstation
+                        sht_replenish.Cells(j, 3) = sht_kanban.Cells(i, 1)
+                        sht_replenish.Cells(j, 4) = qty
+                        sht_replenish.Cells(j, 5) = sht_kanban.Cells(i, 12)
+                        sht_replenish.Cells(j, 6) = sht_kanban.Cells(i, 11)
+                        If special_stock <> "" Then
+                            sht_replenish.Cells(j, 7) = "K"
+                            sht_replenish.Cells(j, 8) = special_stock
+                        End If
+                        end_row = j
+                        j = j + 1
+                        If (available_replenish_qty - allocated_stock_qty) <= 0 Then Exit For
+                    Next k
+                End If
+            End If
+            sht_kanban.Rows(i).Delete
+            i = i - 1
+        Else
+            Exit For
+        End If
+    Next i
+    Call MIGO_311(start_row, end_row)
+End Sub
