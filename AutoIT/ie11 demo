@@ -1,0 +1,26 @@
+#include <IE.au3>
+; open a new window and go to $sUrl
+
+    ;$oIE = _IECreate($sUrl)
+    ;$hIE = _IEPropertyGet($oIE, "hwnd")
+    ;WinActivate($hIE)
+    ;WinWaitActive($hIE, "", 5)
+    ;WinMove($hIE, "", $x, $y, $width, $height)
+
+    ; navigate to $sUrl1
+	$oIE = _IECreate()
+    _IENavigate($oIE, "www.baidu.com"); <-- @error = 9 after this call
+
+    ; search for the user's username
+    $oObj = _IEGetObjByName($oIE,"wd")
+    _IEPropertySet($oObj,"innertext","autoittest"); <-- Initially found the $userName was never input in the search box
+    $oObj = _IEGetObjById($oIE,"su")
+    _IEAction($oObj,"click")
+    _IELoadWait($oIE)
+
+
+;Okay, I think I fixed it after I noticed the failed computer seems to be faster than the one it doesn't fail:
+;Added a delay (i.e. Sleep($delayFactor)) before and after any calls made to IE.au3 functions
+;Added a MsgBox(0, "", "Stop before _IENavigate()!", 1) before any _IENavigate() calls
+;For the 2nd point, I can't use Sleep(1000) to replace the MsgBox() call to fix it.
+;I know, it's weird, but it seems to work here.:sweating:
