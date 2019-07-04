@@ -1,5 +1,16 @@
 Global session As Object
 Global SAPApp As Object
+Public Const col_min_qty = 14
+Public Const col_max_qty = 15
+Public Const col_rounding_qty = 19
+Public Const col_lineside_stock_qty = 20
+Public Const col_main_stock_qty = 21
+Public Const col_required_replenish_qty = 23
+Public Const col_confirm_to_be_replenish = 24
+Public Const col_short_qty = 25
+Public Const col_available_replenish_qty = 26
+Public Const col_qty_spec = 27
+
 
 Sub open_sap()
     If session Is Nothing Then
@@ -33,8 +44,8 @@ Sub kanban_process()
     Set sht_kanban_master = wbk1.Sheets("KANBAN Master Data")
     last_row_kanban = sht_kanban.UsedRange.Rows.Count
     last_row_kanban_master = sht_kanban_master.UsedRange.Rows.Count
-    If last_row_kanban > 1 Then sht_kanban.Range("a2:y" & last_row_kanban).Clear
-    sht_kanban_master.Range("a2:y" & last_row_kanban_master).Copy Destination:=sht_kanban.Cells(2, 1)
+    If last_row_kanban > 1 Then sht_kanban.Range("a2:BB" & last_row_kanban).Clear
+    sht_kanban_master.Range("a2:s" & last_row_kanban_master).Copy Destination:=sht_kanban.Cells(2, 1)
     last_row_kanban = sht_kanban.UsedRange.Rows.Count
     
     Call open_sap
@@ -62,14 +73,19 @@ Sub kanban_process()
     session.findById("wnd[0]/usr/ctxtSO_SOBKZ-LOW").Text = "k"
     session.findById("wnd[0]/usr/chkNOZERO").Selected = True
     session.findById("wnd[0]/usr/chkNOVALUES").Selected = True
+    session.findById("wnd[0]/usr/chkNEGATIV").Selected = False
+    session.findById("wnd[0]/usr/radPA_FLT").Select
+    session.findById("wnd[0]/usr/ctxtP_VARI").Text = "/MB52_SSMR"
+    
     session.findById("wnd[0]/tbar[1]/btn[8]").press
+    
     
     session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell").selectedRows = "0"
     session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell").contextMenu
     session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell").selectContextMenuItem "&XXL"
     On Error Resume Next
     session.findById("wnd[1]/usr/radRB_OTHERS").Select
-    session.findById("wnd[1]/usr/cmbG_LISTBOX").Key = "10"
+    session.findById("wnd[1]/usr/cmbG_LISTBOX").Key = "31" '"10"
     session.findById("wnd[1]/tbar[0]/btn[0]").press
     session.findById("wnd[1]/tbar[0]/btn[0]").press
     session.findById("wnd[1]/tbar[0]/btn[0]").press
@@ -116,29 +132,38 @@ Sub kanban_process()
     
     For j = 2 To last_row
         For k = 2 To last_row_kanban
-            If sht_kanban.Cells(k, 1).Text = sht.Cells(j, col_material).Text Then
+        
+            If Len(sht_kanban.Cells(k, 1).Text) = 7 Then material = "0" + sht_kanban.Cells(k, 1).Text   'handling prefix 0
+            If sht.Cells(j, col_material).Text = sht_kanban.Cells(k, 1).Text Or sht.Cells(j, col_material).Text = material Then
                 If sht_kanban.Cells(k, 11).Text = sht.Cells(j, col_location).Text Then
-                    sht_kanban.Cells(k, 19) = add_qty(sht_kanban.Cells(k, 19), sht.Cells(j, col_available_qty))
+                    sht_kanban.Cells(k, col_lineside_stock_qty) = add_qty(sht_kanban.Cells(k, col_lineside_stock_qty), sht.Cells(j, col_available_qty))
                     Exit For
                 ElseIf sht_kanban.Cells(k, 12).Text = sht.Cells(j, col_location).Text Then
-                    sht_kanban.Cells(k, 20) = add_qty(sht_kanban.Cells(k, 20), sht.Cells(j, col_available_qty))
-                    sht_kanban.Cells(k, 26) = add_qty_spec(sht_kanban.Cells(k, 26), sht.Cells(j, col_special_stock), sht.Cells(j, col_available_qty))
+                    sht_kanban.Cells(k, col_main_stock_qty) = add_qty(sht_kanban.Cells(k, col_main_stock_qty), sht.Cells(j, col_available_qty))
+                    sht_kanban.Cells(k, col_qty_spec) = add_qty_spec(sht_kanban.Cells(k, col_qty_spec), sht.Cells(j, col_special_stock), sht.Cells(j, col_available_qty))
                     Exit For
                 End If
             End If
         Next k
     Next j
     For k = 2 To last_row_kanban
-        lineside_stock_qty = sht_kanban.Cells(k, 19)
-        main_stock_qty = sht_kanban.Cells(k, 20)
-        max_qty = sht_kanban.Cells(k, 15)
-        min_qty = sht_kanban.Cells(k, 14)
+        lineside_stock_qty = sht_kanban.Cells(k, col_lineside_stock_qty)
+        main_stock_qty = sht_kanban.Cells(k, col_main_stock_qty)
+        max_qty = sht_kanban.Cells(k, col_max_qty)
+        min_qty = sht_kanban.Cells(k, col_min_qty)
+        rounding_qty = sht_kanban.Cells(k, col_rounding_qty)
+        
+        If rounding_qty = "" Or rounding_qty = "" Then rounding_qty = 1
         required_replenish_qty = 0
         available_replenish_qty = 0
         confirm_to_be_replenish = ""
         short_qty = 0
         If lineside_stock_qty <= min_qty Then
             required_replenish_qty = max_qty - lineside_stock_qty
+            Quotient = required_replenish_qty / rounding_qty
+            rounded_quotient = Application.WorksheetFunction.RoundDown(Quotient, 0)
+            If Quotient > rounded_quotient Then required_replenish_qty = (rounded_quotient + 1) * rounding_qty
+            
             If main_stock_qty < required_replenish_qty Then
                 available_replenish_qty = main_stock_qty
                 short_qty = required_replenish_qty - available_replenish_qty
@@ -147,15 +172,17 @@ Sub kanban_process()
             End If
             confirm_to_be_replenish = "y"
         End If
-        sht_kanban.Cells(k, 22) = required_replenish_qty
-        sht_kanban.Cells(k, 23) = confirm_to_be_replenish
-        sht_kanban.Cells(k, 24) = short_qty
-        sht_kanban.Cells(k, 25) = available_replenish_qty
+        sht_kanban.Cells(k, col_required_replenish_qty) = required_replenish_qty
+        sht_kanban.Cells(k, col_confirm_to_be_replenish) = confirm_to_be_replenish
+        sht_kanban.Cells(k, col_short_qty) = short_qty
+        sht_kanban.Cells(k, col_available_replenish_qty) = available_replenish_qty
     Next k
+    
+    wbk.Activate
+    wbk.Close SaveChanges:=False
     
     wbk1.Activate
     Call SendEmail
-    wbk.Close SaveChanges:=False
     Call close_sap
     Application.DisplayAlerts = True
     Application.ScreenUpdating = True
@@ -247,7 +274,7 @@ StopMacro:
 End Sub
 
 Sub migo()
-    Call MIGO_311(14, 19)
+    Call MIGO_311(1, 43)
 End Sub
 
 Sub MIGO_311(start_row, end_row)
@@ -298,18 +325,9 @@ Sub MIGO_311(start_row, end_row)
         vendor = sht.Cells(rowno, 8).Text
         plant = "30R1"
         If material = "" Then Exit For
-        pageindex = j Mod pagesize
-        If i > 1 And (i <= (pagesize + 1) And pageindex = 1) Or (i > pagesize And pageindex = 0) Then
-            session.findById("wnd[0]/tbar[0]/btn[82]").press   ' click the next page button
-            CurrentRow = 0   'for newly input, from next page start from 1 other than 0
-        End If
         
-        If i = 1 Then
-            CurrentRow = 0
-        Else
-            CurrentRow = CurrentRow + 1  'start from 2nd page, the starting input row is at 2nd(index 1)
-        End If
-        
+        If i > 1 Then CurrentRow = CurrentRow + 1  'start from 2nd page, the starting input row is at 2nd(index 1)
+                
         Set cur_row = session.findById("wnd[0]/usr").FindByNameEx("SAPLMIGOTV_GOITEM", 80).Rows(CurrentRow)
         col_count = 0
         material_assigned = False
@@ -344,9 +362,18 @@ Sub MIGO_311(start_row, end_row)
             If col_count > 7 Then Exit For
         Next ii
         Set cur_row = Nothing
+        'pageindex = i Mod pagesize
+        page_number = Application.WorksheetFunction.RoundUp(i / pagesize, 0)
+        '1st page contains full pagesize rows, next pages contains only pagesize -1 rows because 1st row from previous page occupied
+        If (i = page_number * pagesize - page_number + 1) Then
+            session.findById("wnd[0]").sendVKey 0
+            session.findById("wnd[0]/tbar[0]/btn[82]").press   ' click the next page button
+            CurrentRow = 0   'for newly input, from next page start from 1 other than 0
+        End If
 next_record:
     Next i
     
+    session.findById("wnd[0]").sendVKey 0
     session.findById("wnd[0]/tbar[0]/btn[11]").press   'save
     MessageType = session.findById("wnd[0]/sbar").MessageType
     If MessageType = "W" Then
@@ -396,11 +423,12 @@ Sub replenish()
     For i = 2 To sht_kanban_row_count
         If workstation = "" Then Exit For
         If sht_kanban.Cells(i, 8) = workstation Then
-            If sht_kanban.Cells(i, 23) <> "" Then   'confirm to be replenished
-                lineside_stock_qty = sht_kanban.Cells(i, 19)
-                main_stock_qty = sht_kanban.Cells(i, 20)
-                max_qty = sht_kanban.Cells(i, 15)
-                available_replenish_qty = sht_kanban.Cells(i, 25)
+            If sht_kanban.Cells(i, col_confirm_to_be_replenish) <> "" Then   'confirm to be replenished
+                sht_kanban.Cells(i, col_confirm_to_be_replenish) = ""
+                lineside_stock_qty = sht_kanban.Cells(i, col_lineside_stock_qty)
+                main_stock_qty = sht_kanban.Cells(i, col_main_stock_qty)
+                max_qty = sht_kanban.Cells(i, col_max_qty)
+                available_replenish_qty = sht_kanban.Cells(i, col_available_replenish_qty)
                 If available_replenish_qty = 0 Then
                     If max_qty > lineside_stock_qty Then
                         required_replenish_qty = max_qty - lineside_stock_qty
@@ -412,37 +440,54 @@ Sub replenish()
                     End If
                 End If
                 If available_replenish_qty > 0 Then
-                    arr_qty_spec = Split(sht_kanban.Cells(i, 26), ";")
-                    allocated_stock_qty = 0
-                    For k = 0 To UBound(arr_qty_spec)
-                        qty_spec = arr_qty_spec(k)
-                        special_stock = Split(qty_spec, ",")(0)
-                        qty = Split(qty_spec, ",")(1)
-                        If qty > (available_replenish_qty - allocated_stock_qty) Then
-                            qty = available_replenish_qty - allocated_stock_qty
-                            allocated_stock_qty = allocated_stock_qty + qty
-                        End If
-                        sht_replenish.Cells(j, 1) = Now
-                        sht_replenish.Cells(j, 2) = workstation
-                        sht_replenish.Cells(j, 3) = sht_kanban.Cells(i, 1)
-                        sht_replenish.Cells(j, 4) = qty
-                        sht_replenish.Cells(j, 5) = sht_kanban.Cells(i, 12)
-                        sht_replenish.Cells(j, 6) = sht_kanban.Cells(i, 11)
-                        If special_stock <> "" Then
-                            sht_replenish.Cells(j, 7) = "K"
-                            sht_replenish.Cells(j, 8) = special_stock
-                        End If
-                        end_row = j
-                        j = j + 1
-                        If (available_replenish_qty - allocated_stock_qty) <= 0 Then Exit For
-                    Next k
+                
+                    rounding_qty = sht_kanban.Cells(i, col_rounding_qty)
+                    If rounding_qty = 0 Or rounding_qty = "" Then rounding_qty = 1
+                    Quotient = available_replenish_qty / rounding_qty
+                    rounded_quotient = Application.WorksheetFunction.RoundDown(Quotient, 0)
+                    If Quotient > rounded_quotient Then available_replenish_qty = (rounded_quotient + 1) * rounding_qty
+                    If main_stock_qty < available_replenish_qty Then
+                        For m = Quotient To 1
+                            available_replenish_qty = rounding_qty * Quotient
+                            If available_qty <= main_stock_qty Then Exit For
+                        Next m
+                    End If
+                    
+                    If available_replenish_qty <= main_stock_qty Then
+                        sht_kanban.Cells(i, col_available_replenish_qty) = available_replenish_qty
+                        arr_qty_spec = Split(sht_kanban.Cells(i, col_qty_spec), ";")
+                        allocated_stock_qty = 0
+                        For k = 0 To UBound(arr_qty_spec)
+                            qty_spec = arr_qty_spec(k)
+                            special_stock = Split(qty_spec, ",")(0)
+                            qty = Split(qty_spec, ",")(1)
+                            If qty > (available_replenish_qty - allocated_stock_qty) Then
+                                qty = available_replenish_qty - allocated_stock_qty
+                                allocated_stock_qty = allocated_stock_qty + qty
+                            End If
+                            sht_replenish.Cells(j, 1) = Now
+                            sht_replenish.Cells(j, 2) = workstation
+                            sht_replenish.Cells(j, 3) = sht_kanban.Cells(i, 1)
+                            sht_replenish.Cells(j, 4) = qty
+                            sht_replenish.Cells(j, 5) = sht_kanban.Cells(i, 12)
+                            sht_replenish.Cells(j, 6) = sht_kanban.Cells(i, 11)
+                            If special_stock <> "" Then
+                                sht_replenish.Cells(j, 7) = "K"
+                                sht_replenish.Cells(j, 8) = special_stock
+                            End If
+                            end_row = j
+                            j = j + 1
+                            If (available_replenish_qty - allocated_stock_qty) <= 0 Then Exit For
+                        Next k
+                    End If
                 End If
             End If
-            sht_kanban.Rows(i).Delete
-            i = i - 1
+            'sht_kanban.Rows(i).Delete
+            'i = i - 1
         Else
             Exit For
         End If
     Next i
     Call MIGO_311(start_row, end_row)
 End Sub
+
