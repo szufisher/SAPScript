@@ -1,0 +1,163 @@
+Global session As Object
+Global SAPApp As Object
+#If VBA7 Then
+  Private Declare PtrSafe Function AccessibleObjectFromWindow Lib "oleacc" ( _
+    ByVal hwnd As LongPtr, ByVal dwId As Long, riid As Any, ppvObject As Object) As Long
+
+  Private Declare PtrSafe Function FindWindowExA Lib "user32" ( _
+    ByVal hwndParent As LongPtr, ByVal hwndChildAfter As LongPtr, _
+    ByVal lpszClass As String, ByVal lpszWindow As String) As LongPtr
+#Else
+  Private Declare Function AccessibleObjectFromWindow Lib "oleacc" ( _
+    ByVal hwnd As Long, ByVal dwId As Long, riid As Any, ppvObject As Object) As Long
+
+  Private Declare Function FindWindowExA Lib "user32" ( _
+    ByVal hwndParent As Long, ByVal hwndChildAfter As Long, _
+    ByVal lpszClass As String, ByVal lpszWindow As String) As Long
+#End If
+
+Sub Test()
+  Dim xl As Application
+  For Each xl In GetExcelInstances()
+    Debug.Print "Handle: " & xl.ActiveWorkbook.fullname
+  Next
+End Sub
+
+Sub get_open_workbook(ByVal file_name As String, ByRef wb As Workbook)
+    Dim xl As Application
+    For Each xl In GetExcelInstances()
+        If xl.ActiveWorkbook.Name = file_name Then
+            Set wb = xl.ActiveWorkbook
+            Exit For
+        End If
+    Next
+    Set xl = Nothing
+End Sub
+
+Public Function GetExcelInstances() As Collection
+  Dim guid&(0 To 3), acc As Object, hwnd, hwnd2, hwnd3
+  guid(0) = &H20400
+  guid(1) = &H0
+  guid(2) = &HC0
+  guid(3) = &H46000000
+
+  Set GetExcelInstances = New Collection
+  Do
+    hwnd = FindWindowExA(0, hwnd, "XLMAIN", vbNullString)
+    If hwnd = 0 Then Exit Do
+    hwnd2 = FindWindowExA(hwnd, 0, "XLDESK", vbNullString)
+    hwnd3 = FindWindowExA(hwnd2, 0, "EXCEL7", vbNullString)
+    If AccessibleObjectFromWindow(hwnd3, &HFFFFFFF0, guid(0), acc) = 0 Then
+      GetExcelInstances.Add acc.Application
+    End If
+  Loop
+End Function
+Sub open_sap()
+    If session Is Nothing Then
+        Set SapGuiAuto = GetObject("SAPGUI")  'Get the SAP GUI Scripting object
+        Set SAPApp = SapGuiAuto.GetScriptingEngine 'Get the currently running SAP GUI
+        Set SAPCon = SAPApp.Children(0) 'Get the first system that is currently connected
+        Set session = SAPCon.Children(0) 'Get the first session (window) on that connection
+    End If
+End Sub
+Sub close_sap()
+    If Not SAPApp Is Nothing Then
+        Set session = Nothing
+        Set SAPCon = Nothing
+        Set SAPApp = Nothing
+        Set SapGuiAuto = Nothing
+        MsgBox "Process Completed"
+    End If
+End Sub
+Sub Download_Excel()
+    Dim wbk As Workbook
+    Dim filename As String
+    Dim Path As String
+    Application.ScreenUpdating = False
+    Application.DisplayAlerts = False
+    
+    Call open_sap
+    
+    session.findById("wnd[0]").maximize
+    session.findById("wnd[0]/tbar[0]/btn[3]").press
+    session.findById("wnd[0]/tbar[0]/btn[3]").press
+    session.findById("wnd[0]/tbar[0]/okcd").Text = "/nS_ALR_87011990"
+    session.findById("wnd[0]").sendVKey 0
+    session.findById("wnd[0]/usr/radXEINZEL").Select
+    session.findById("wnd[0]/usr/ctxtBUKRS-LOW").Text = "cn10"
+    session.findById("wnd[0]/usr/ctxtBEREICH1").Text = "60"
+    session.findById("wnd[0]/usr/ctxtSRTVR").Text = "0002"
+    session.findById("wnd[0]/tbar[1]/btn[8]").press
+    session.findById("wnd[0]/mbar/menu[0]/menu[1]/menu[1]").Select
+    session.findById("wnd[1]/usr/radRB_2").Select
+    session.findById("wnd[1]/usr/radRB_1").Select
+    session.findById("wnd[1]/tbar[0]/btn[0]").press
+    
+    Path = session.findById("wnd[1]/usr/ctxtDY_PATH").Text
+    'session.findById("wnd[1]/usr/ctxtDY_PATH").Text = "C:\\TEMp"
+    filename = "S_ALR_87011990" & "_" & Replace(CStr(CDbl(Now())), ".", "") & ".MHTML"
+    session.findById("wnd[1]/usr/ctxtDY_FILENAME").Text = filename '"assetEXPORT.MHTML"
+    session.findById("wnd[1]/tbar[0]/btn[0]").press
+    
+    If Right(Path, 1) <> "\" Then Path = Path + "\"
+    fullname = Path & filename
+    Application.Wait Now + TimeValue("0:00:03")
+    
+    On Error Resume Next
+    Call get_open_workbook(filename, wbk)
+    If Err.Number <> 0 Then
+        If wbk Is Nothing Then Set wbk = Workbooks.Open(filename:=fullname, ReadOnly:=True)
+    End If
+    Set sht = wbk.Sheets(1)
+    last_col = sht.UsedRange.Columns.Count
+    last_row = sht.UsedRange.Rows.Count
+    col_count = 0
+    For i = 1 To last_col
+        col_label = Trim(sht.Cells(1, i).Text)
+        If col_label = "Asset" Then
+            col_asset = i
+            col_count = col_count + 1
+        ElseIf col_label = "Capitalized on" Then
+            col_capitalized_on = i
+            col_count = col_count + 1
+        ElseIf col_label = "Asset description" Then
+            col_asset_description = i
+            col_count = col_count + 1
+        ElseIf col_label = "Current APC" Then
+            col_current_apc = i
+            col_count = col_count + 1
+        ElseIf col_label = "Cost Center" Then
+            col_cost_center = i
+            col_count = col_count + 1
+        ElseIf col_label = "Room" Then
+            col_room = i
+            col_count = col_count + 1
+        ElseIf col_label = "Asset Class" Then
+            col_asset_class = i
+            col_count = col_count + 1
+        ElseIf col_label = "Deactivation on" Then
+            col_deactivatio_on = i
+            col_count = col_count + 1
+        End If
+        If col_count >= 8 Then Exit For
+    Next i
+    If col_count < 8 Then
+        MsgBox "Default layout should include fields: Asset,Capitalized on,Asset description,Current APC,Cost Center,Room,Asset Class,Deactivation on"
+        'Exit Sub
+    End If
+    
+    MsgBox "total records" & Str(last_row)
+    For j = 2 To last_row
+ 
+    Next j
+    'wbk.Close SaveChanges:=False
+    Set xlApp2 = wbk.Application
+    xlApp2.CutCopyMode = False
+    xlApp2.DisplayAlerts = False
+    xlApp2.Quit
+    Set xlApp2 = Nothing
+    
+    Call close_sap
+    Application.DisplayAlerts = True
+    Application.ScreenUpdating = True
+End Sub
