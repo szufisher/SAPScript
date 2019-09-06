@@ -1,0 +1,193 @@
+Global session As Object
+Global SAPApp As Object
+#If VBA7 Then
+  Private Declare PtrSafe Function AccessibleObjectFromWindow Lib "oleacc" ( _
+    ByVal hwnd As LongPtr, ByVal dwId As Long, riid As Any, ppvObject As Object) As Long
+
+  Private Declare PtrSafe Function FindWindowExA Lib "user32" ( _
+    ByVal hwndParent As LongPtr, ByVal hwndChildAfter As LongPtr, _
+    ByVal lpszClass As String, ByVal lpszWindow As String) As LongPtr
+#Else
+  Private Declare Function AccessibleObjectFromWindow Lib "oleacc" ( _
+    ByVal hwnd As Long, ByVal dwId As Long, riid As Any, ppvObject As Object) As Long
+
+  Private Declare Function FindWindowExA Lib "user32" ( _
+    ByVal hwndParent As Long, ByVal hwndChildAfter As Long, _
+    ByVal lpszClass As String, ByVal lpszWindow As String) As Long
+#End If
+
+Sub test()
+  Dim xl As Application
+  For Each xl In GetExcelInstances()
+    Debug.Print "Handle: " & xl.ActiveWorkbook.FullName
+  Next
+End Sub
+
+Sub get_open_workbook(ByVal file_name As String, ByRef wb As Workbook)
+    Dim xl As Application
+    For Each xl In GetExcelInstances()
+        If xl.ActiveWorkbook.Name = file_name Then
+            Set wb = xl.ActiveWorkbook
+            Exit For
+        End If
+    Next
+    Set xl = Nothing
+End Sub
+
+Public Function GetExcelInstances() As Collection
+  Dim guid&(0 To 3), acc As Object, hwnd, hwnd2, hwnd3
+  guid(0) = &H20400
+  guid(1) = &H0
+  guid(2) = &HC0
+  guid(3) = &H46000000
+  Set GetExcelInstances = New Collection
+  Do
+    hwnd = FindWindowExA(0, hwnd, "XLMAIN", vbNullString)
+    If hwnd = 0 Then Exit Do
+    hwnd2 = FindWindowExA(hwnd, 0, "XLDESK", vbNullString)
+    hwnd3 = FindWindowExA(hwnd2, 0, "EXCEL7", vbNullString)
+    If AccessibleObjectFromWindow(hwnd3, &HFFFFFFF0, guid(0), acc) = 0 Then
+      GetExcelInstances.Add acc.Application
+    End If
+  Loop
+End Function
+
+
+Sub open_sap()
+    If session Is Nothing Then
+        Set SapGuiAuto = GetObject("SAPGUI")  'Get the SAP GUI Scripting object
+        Set SAPApp = SapGuiAuto.GetScriptingEngine 'Get the currently running SAP GUI
+        Set SAPCon = SAPApp.Children(0) 'Get the first system that is currently connected
+        Set session = SAPCon.Children(0) 'Get the first session (window) on that connection
+    End If
+End Sub
+
+Sub close_sap()
+    If Not SAPApp Is Nothing Then
+        Set session = Nothing
+        Set SAPCon = Nothing
+        Set SAPApp = Nothing
+        Set SapGuiAuto = Nothing
+        MsgBox "Process Completed"
+    End If
+End Sub
+
+Sub download()
+    Dim wbk As Workbook
+    Call open_sap
+    Dim lr As Double
+    row_index = 0
+    title_extracted = False
+    Sheets(1).UsedRange.ClearContents
+    
+    For i = 3 To Sheets(2).UsedRange.Rows.Count
+        material = Sheets(2).Cells(i, 1)
+        plant = Sheets(2).Cells(i, 2)
+        valid_date = Sheets(2).Cells(i, 3)
+        If material = "" Then Exit For
+        session.findById("wnd[0]").maximize
+        session.findById("wnd[0]/tbar[0]/okcd").Text = "/ncs12"
+        session.findById("wnd[0]").sendVKey 0
+        session.findById("wnd[0]/usr/ctxtRC29L-MATNR").Text = material '"03472995"
+        session.findById("wnd[0]/usr/ctxtRC29L-WERKS").Text = plant
+        session.findById("wnd[0]/usr/ctxtRC29L-CAPID").Text = "pc01"
+        session.findById("wnd[0]/usr/txtRC29L-EMENG").Text = 1
+        session.findById("wnd[0]/tbar[1]/btn[8]").press
+        
+        If session.findById("wnd[0]/sbar").MessageType = "E" Then
+            Sheets(2).Cells(i, 4) = session.findById("wnd[0]/sbar").Text
+        Else
+            On Error Resume Next
+            session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell/shellcont[1]/shell").currentCellColumn = "POSNR"
+            If Err.Number <> 0 Then GoTo next_rec
+            session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell/shellcont[1]/shell").contextMenu
+            session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell/shellcont[1]/shell").selectContextMenuItem "&XXL"
+            session.findById("wnd[1]/usr/radRB_OTHERS").Select
+            session.findById("wnd[1]/usr/cmbG_LISTBOX").Key = "31"
+            'session.findById("wnd[0]/tbar[1]/btn[43]").press ' export Excel button, if selected always, no popup window,
+            session.findById("wnd[1]/tbar[0]/btn[0]").press
+            Filename = CStr(material) + ".xlsx"
+            For ii = 1 To 10
+                On Error Resume Next
+                session.findById("wnd[1]/usr/ctxtDY_PATH").Text = Sheets(2).Cells(1, 2) '"d:\sap_upload\"
+                session.findById("wnd[1]/usr/ctxtDY_FILENAME").Text = Filename '"book1.xlsx"
+                If Err.Number <> 0 Then
+                    Application.Wait (Now + TimeValue("0:00:01"))
+                Else
+                    Exit For
+                End If
+            Next ii
+            'session.findById("wnd[1]/usr/ctxtDY_FILE_ENCODING").SetFocus
+            session.findById("wnd[1]/tbar[0]/btn[0]").press
+            For k = 1 To 30
+                If wbk Is Nothing Then
+                    Application.Wait Now + TimeValue("0:00:01") 'wait till file open, the workbook name changed from book1 to real name
+                    Call get_open_workbook(Filename, wbk)
+                Else
+                    Sheets(2).Cells(i, 4) = "download OK"
+                    'close the auto opened Excel downloaded
+                    Set xlApp2 = wbk.Application
+                    xlApp2.CutCopyMode = False
+                    xlApp2.DisplayAlerts = False
+                    xlApp2.Quit                 'close the independent excel instance
+                    Set xlApp2 = Nothing
+                    Set wbk = Nothing
+                    Exit For
+                End If
+            Next
+next_rec:
+        End If
+    Next i
+    'If Cells(1, 2) <> "" Then
+    '    Call combine
+    'End If
+    Call close_sap
+End Sub
+
+Sub combine()
+    Dim wbk As Workbook
+    Dim wbk1 As Workbook
+    Set wbk1 = ThisWorkbook
+    Dim Filename As String
+    Dim Path As String
+    Dim header_copied
+    header_copied = False
+    Path = Sheets(2).Cells(1, 2) '"D:\test\"
+    Filename = Dir(Path & "*.xlsx")
+    FullName = Path & Filename
+    Do While Len(Filename) > 0
+        Set wbk = Workbooks.Open(Path & Filename)
+        If header_copied = False Then
+            wbk.Activate
+            Range("A1").Select
+            Range(Selection, Selection.End(xlToRight)).Select
+            Range(Selection, Selection.End(1)).Select
+            Selection.Copy
+            wbk1.Activate
+            Application.DisplayAlerts = False
+            Sheets(1).Activate
+            Cells(1, 1) = "Part No."
+            Cells(1, 2).Select
+            ActiveSheet.Paste
+            header_copied = True
+        End If
+        wbk.Activate
+        Range("A2").Select
+        Range(Selection, Selection.End(xlToRight)).Select
+        If ActiveSheet.UsedRange.Rows.Count > 2 Then
+            Range(Selection, Selection.End(xlDown)).Select
+        End If
+        Selection.Copy
+        row_count = Cells(Rows.Count, 1).End(xlUp).Row - 1
+        wbk1.Activate
+        Application.DisplayAlerts = False
+        Dim lr As Double
+        lr = wbk1.Sheets(1).Cells(Rows.Count, 2).End(xlUp).Row
+        Sheets(1).Select
+        Cells(lr + 1, 2).Select
+        ActiveSheet.Paste
+        Range(Cells(lr + 1, 1), Cells(lr + row_count, 1)) = Left(Filename, Len(Filename) - 5)
+        wbk.Close True
+        Filename = Dir
+    Loop
+End Sub
