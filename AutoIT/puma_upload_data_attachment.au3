@@ -20,29 +20,41 @@ GUICtrlCreateObj($oIE, 250, 20, @DesktopWidth-300,350)
 $Label1 = GUICtrlCreateLabel("Home Page", 20, 20, 60, 25)
 $HomePage = GUICtrlCreateInput("https://opw.siemens.com/opw/Default.aspx", 85, 20, 115, 25)
 Local $idButton_Go = GUICtrlCreateButton("Go", 200, 20, 45, 25)
+
 $Label3 = GUICtrlCreateLabel("Upload File", 20, 50, 60, 25)
 $Puma = GUICtrlCreateInput(@WorkingDir & "\puma.txt", 85,50 ,115 , 25)
 $Button1 = GUICtrlCreateButton("Select", 200, 50, 45, 25)
+
 $Label4 = GUICtrlCreateLabel("Steps", 20, 80, 60, 25)
 $Step = GUICtrlCreateInput(@WorkingDir & "\step_puma.txt", 85, 80, 115, 25)
 $Button2 = GUICtrlCreateButton("Select", 200, 80, 45, 25)
-$Label5 = GUICtrlCreateLabel("Attach Fold", 20, 110, 60, 25)
-$attachment = GUICtrlCreateInput(@WorkingDir & "\upload", 85, 110, 115, 25)
-$idButton_attach = GUICtrlCreateButton("Upload", 200, 110, 45, 25)
-$listview = GUICtrlCreateListView("Month",20,140,70,260, -1, $LVS_EX_CHECKBOXES )
+
+Local $idButton_Start = GUICtrlCreateButton("Upload Actual+Forecast",80, 108, 140, 20)
+
+$Label5 = GUICtrlCreateLabel("Fiscal Year", 20, 135, 60, 25)
+$year = GUICtrlCreateInput("", 90, 130, 60, 25)
+$idButton_upload_forecast = GUICtrlCreateButton("Upload Forecast", 160, 130, 90, 25)
+
+$listview = GUICtrlCreateListView("Month",20,160,70,260, -1, $LVS_EX_CHECKBOXES )
 _GUICtrlListView_SetColumnWidth($listview, 0, $LVSCW_AUTOSIZE_USEHEADER)
+
 $init_months = StringSplit("Oct,Nov,Dec,Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep", ",")
 dim $months[13]
 $months[0]=12
 For $i = 1 To UBound($init_months) - 1
    $months[$i]=GUICtrlCreateListViewItem($init_months[$i],$listview)
 Next
-Local $idButton_Start = GUICtrlCreateButton("Upload Data",120, 140, 100, 25)
-Global $msg1 = GUICtrlCreateLabel("Processing Status", 100, 170, 150, 25)
+
+Global $msg1 = GUICtrlCreateLabel("Processing Status", 100, 160, 150, 25)
 Global $msg2 = GUICtrlCreateLabel("OK count", 100, 200, 170, 25)
 Global $msg3 = GUICtrlCreateLabel("Failed PUMA#", 100, 240, 150, 25)
-Global $idListview = GUICtrlCreateListView("PUMA#", 100, 255, 150, 250)
+Global $idListview = GUICtrlCreateListView("PUMA#", 100, 255, 150, 160)
 GUICtrlSetColor(-1, 0xff0000)
+
+$Label6 = GUICtrlCreateLabel("Folder", 20, 430, 60, 25)
+$attachment = GUICtrlCreateInput(@WorkingDir & "\upload", 85, 425, 115, 25)
+$idButton_attach = GUICtrlCreateButton("Upload", 200, 425, 45, 25)
+
 $message = "Select File"
 GUISetState(@SW_SHOW) ;Show GUI
 _IENavigate($oIE, "https://opw.siemens.com/opw/Default.aspx")
@@ -61,14 +73,16 @@ While 1
 			Sleep(1000)
             CheckError("Home", @error, @extended)
       Case $iMsg = $idButton_Start
-			Start()
+			Start(False)
             CheckError("Start", @error, @extended)
-     Case $iMsg = $idButton_attach
+	  Case $iMsg = $idButton_upload_forecast
+			Start(True)
+            CheckError("Start", @error, @extended)
+      Case $iMsg = $idButton_attach
 			Upload_attachment()
             CheckError("Start", @error, @extended)
 	  Case $iMsg = $idButton_Go
 			_IENavigate($oIE,GUICtrlRead($HomePage))
-            ;_IEAction($oIE, "back")
             CheckError("Forward", @error, @extended)
     EndSelect
 WEnd
@@ -86,9 +100,7 @@ Func Upload_attachment()
    If UBound($FileList) -1>1 Then Run('Handle_File_Upload.exe','',@SW_MAXIMIZE)
 
    For $i = UBound($FileList) -1 To 1 Step -1
-	  ;MsgBox(0,"File Name", "This is the File Name " & @CR & $FileList[$i] & @CR & "in this position" & @CR & $i & @CR &  "in your array")
 	  $FileName = $FileList[$i]
-	  ConsoleWrite("File Extracted" & $FileName & " " & $i  & @CRLF)
 	  if StringInStr($FileName,".xls")>0 and StringInStr($FileName,"_")>0 Then
 		 $puma= StringSplit($FileName,"_")[1]      ;"671954"
 	  Else
@@ -97,7 +109,7 @@ Func Upload_attachment()
 		 ContinueLoop
 	  EndIf
 	  $file = $Folder & "\" & $FileName
-	  ConsoleWrite("File:" & $file & " to be processed"  & @CRLF)
+	  ;ConsoleWrite("File:" & $file & " to be processed"  & @CRLF)
 	  ProcessOneStep("input","id",	"_adHeader_MainActionSearch_SearchTextBox","setvalue",$puma )
 	  ProcessOneStep("button","id","_adHeader_MainActionSearch_ActionSearchButton","click")
 	  For $ii = 1 to 500  ;wait till page refreshed
@@ -151,7 +163,16 @@ Func Upload_attachment()
 EndFunc
 
 
-Func Start()
+Func Start($upload_forecast)
+
+   $id_forecast_total = 'ctl00_cphContentHeader_Action_ActionTabPage_FactsAndFiguresGrid_cell0_17_RowSummaryLabel'
+   $id_fiscal_year ='ctl00_cphContentHeader_Action_ActionTabPage_FiscalYearPicker_FiscalYearDropDownList'
+
+   $fiscal_year = GUICtrlRead($year)
+   If $upload_forecast and $fiscal_year == "" Then
+	  MsgBox(0,'Error', 'Please set fiscal year before upload forecast!')
+	  Return
+   EndIf
    $selected_month = ""
    $iStart_month=0
    $iEnd_month=0
@@ -191,11 +212,18 @@ Func Start()
 			$input_value = $columns_puma[1]
 			If StringLen($input_value) == 0 Then Return  ;puma number empty end of processing
 		 ElseIf $j == 5 Then
+
+			If $upload_forecast Then ContinueLoop    ;only upload forecast
+
 			$attr_value = StringReplace($attr_value, "{month}", $header_column[$iStart_month+1])
 			$attr_value = StringReplace($attr_value, "{index}", String($iStart_month+4))
 			$input_value = $columns_puma[$iStart_month+1]
 		 ElseIf $j == 6 Then  ;loop to input selected months data
+
+			If $upload_forecast Then $iStart_month = $iStart_month - 1   ;upload all months forecast
+
 			For $k=$iStart_month+2 to $iEnd_month+1
+
 			   If StringInStr($selected_month, $header_column[$k]) Then
 				  $input_value = $columns_puma[$k]
 				  $attr_value = StringReplace($columns_step[5], "{month}", $header_column[$k])
@@ -213,7 +241,7 @@ Func Start()
 		 If $j <> 6 Then
 			If Not ProcessOneStep($columns_step[3],$columns_step[4], $attr_value, $columns_step[6],$input_value) Then
 			   If $i == 2 Then
-				  MsgBox(0,'Error', 'Please login PUMA website before uploading!')
+				  MsgBox(0,'Error', 'Please check the template file column header and make sure already login PUMA website before uploading!')
 				  Return
 			   EndIf
 			   ConsoleWrite('Step failed!'& @TAB)
@@ -228,6 +256,21 @@ Func Start()
 			For $ii = 1 to 500
 			   $new_action = Get_InnerText_By_ID('cphContentHeader_Action_InformationActionIdValue')
 			   If $new_action == $columns_puma[1] Then
+				  ExitLoop
+			   Else
+				  Sleep(50)
+			   EndIf
+			Next
+			;switch to the fiscal year for upload forecast only
+			$old_forecast_total = Get_InnerText_By_ID($id_forecast_total)
+			;ConsoleWrite("forecast total old:" & $old_forecast_total & @CRLF)
+			Local $oFactsTab = _IEGetObjById($oIE,'ctl00_cphContentHeader_Action_ActionTabPage_AT2')
+			_IEAction($oFactsTab, "click")
+			Local $oFiscalYear = _IEGetObjById($oIE,$id_fiscal_year)
+            _IEFormElementOptionSelect($oFiscalYear, $fiscal_year, 1, "byText")
+			For $ii = 1 to 200
+			   $new_forecast_total = Get_InnerText_By_ID($id_forecast_total)
+			   If $new_forecast_total <> $old_forecast_total Then
 				  ExitLoop
 			   Else
 				  Sleep(50)
