@@ -142,7 +142,7 @@ Func Upload_attachment()
 		 $msg = ""
 		 For $k=1 to 150
 		   $new_overview_status = Get_InnerText_By_ID('cphContentHeader_Action_InformationActionLastupdateValue')
-		   ConsoleWrite("old:" & $old_overview_status  & " new :" & $new_overview_status  & @CRLF)
+		   ;ConsoleWrite("old:" & $old_overview_status  & " new :" & $new_overview_status  & @CRLF)
 		   If $old_overview_status <> $new_overview_status Then
 			  Sleep(100)
 			  $ok_count = $ok_count + 1
@@ -164,11 +164,20 @@ EndFunc
 
 
 Func Start($upload_forecast)
+   $fiscal_year = GUICtrlRead($year)
 
    $id_forecast_total = 'ctl00_cphContentHeader_Action_ActionTabPage_FactsAndFiguresGrid_cell0_17_RowSummaryLabel'
    $id_fiscal_year ='ctl00_cphContentHeader_Action_ActionTabPage_FiscalYearPicker_FiscalYearDropDownList'
+   $id_allocation ='ctl00_cphContentHeader_Action_ActionTabPage_ActionAllocationControl_AllocationGrid_cell0_{index}_tb{year}'
+   $sPreviousYear = String(Int($fiscal_year)-1)
+   $sPreviousYearIndex = String(Int(StringRight($fiscal_year,2))-11)
+   $id_allocation_previous_year = StringReplace($id_allocation, "{index}",$sPreviousYearIndex)
+   $id_allocation_previous_year = StringReplace($id_allocation_previous_year, "{year}",$sPreviousYear)
 
-   $fiscal_year = GUICtrlRead($year)
+   $sYearIndex = String(Int(StringRight($fiscal_year,2))-10)
+   $id_allocation_year = StringReplace($id_allocation, "{index}",$sYearIndex)
+   $id_allocation_year = StringReplace($id_allocation_year, "{year}",$fiscal_year)
+
    If $upload_forecast and $fiscal_year == "" Then
 	  MsgBox(0,'Error', 'Please set fiscal year before upload forecast!')
 	  Return
@@ -228,7 +237,7 @@ Func Start($upload_forecast)
 				  $input_value = $columns_puma[$k]
 				  $attr_value = StringReplace($columns_step[5], "{month}", $header_column[$k])
 				  $attr_value = StringReplace($attr_value, "{index}", String($k+3))	;month index
-				  ConsoleWrite("month:" & $header_column[$k] & "||" &  @TAB & $input_value & @TAB & $attr_value & @TAB & $columns_puma[1] & @CRLF)
+				  ;ConsoleWrite("month:" & $header_column[$k] & "||" &  @TAB & $input_value & @TAB & $attr_value & @TAB & $columns_puma[1] & @CRLF)
 				  If Not ProcessOneStep($columns_step[3],$columns_step[4], $attr_value, $columns_step[6],$input_value) Then
 					 ConsoleWrite('Step failed!' & @TAB)
 					 $failed = True
@@ -247,7 +256,7 @@ Func Start($upload_forecast)
 			   ConsoleWrite('Step failed!'& @TAB)
 			   $failed = True
 			EndIf
-     	    ConsoleWrite($columns_step[2] & @TAB & $input_value & @TAB & $attr_value & @TAB & $line_puma & @CRLF)
+     	    ;ConsoleWrite($columns_step[2] & @TAB & $input_value & @TAB & $attr_value & @TAB & $line_puma & @CRLF)
 		 EndIf
 		 if $failed == True Then
 			ExitLoop
@@ -268,6 +277,14 @@ Func Start($upload_forecast)
 			_IEAction($oFactsTab, "click")
 			Local $oFiscalYear = _IEGetObjById($oIE,$id_fiscal_year)
             _IEFormElementOptionSelect($oFiscalYear, $fiscal_year, 1, "byText")
+			;copy previous year allocation to new forecast year
+			$allocation_previous_year = _IEGetObjById($oIE, $id_allocation_previous_year)
+			$allocation_previous_year = _IEFormElementGetValue($allocation_previous_year)
+
+			$allocation_year = _IEGetObjById($oIE, $id_allocation_year)
+			_IEFormElementSetValue($allocation_year, $allocation_previous_year)
+
+			;ConsoleWrite($id_allocation_previous_year &":"  & $id_allocation_year & ":" & $allocation_previous_year & @CRLF)
 			For $ii = 1 to 200
 			   $new_forecast_total = Get_InnerText_By_ID($id_forecast_total)
 			   If $new_forecast_total <> $old_forecast_total Then
@@ -283,7 +300,7 @@ Func Start($upload_forecast)
 	  $msg = ""
 	  For $k=1 to 150
 	    $new_overview_status = Get_InnerText_By_ID('cphContentHeader_Action_InformationActionLastupdateValue')
-		ConsoleWrite("old:" & $old_overview_status  & "new :" & $new_overview_status  & @CRLF)
+		;ConsoleWrite("old:" & $old_overview_status  & "new :" & $new_overview_status  & @CRLF)
 		If $old_overview_status <> $new_overview_status Then
 		   Sleep(100)
 		   $ok_count = $ok_count + 1
