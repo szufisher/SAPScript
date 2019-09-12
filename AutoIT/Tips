@@ -1,0 +1,27 @@
+1. controlclick does not work
+
+should be executed by admin, add #RequireAdmin at beginning of the script, also winactivate beforehand
+
+2.controlclick by button caption does not work
+
+there is icon before the caption, use classNN, or class:xxx; instance
+
+3. send(text) only partial text
+
+add sleep(500) after send
+
+4. controlsettext does not work for edit box in grid
+controlFocus the Grid first
+then Send({TAB}) to locate to the target edit box
+finally Send(text)
+
+5. arrow down({DOWN}) does not work as expected
+ControlFocus the container control before Send({DOWN})
+
+6. File upload dialog can not be handled in the main script
+
+create another independent script from the main script, use text file as communication meduim between the main and child script
+
+
+
+
