@@ -9,13 +9,19 @@ cf =get_configer('asset_interface.conf')
 logger = get_logger('asset_interface.log')
 
 def execute_transaction(session, tcode, company, sort_variant, conn, cursor):
+    def get_workbook(fullname):
+        try:
+            return load_workbook(fullname)
+        except:
+            return False
+            
     # Download Excel
     session.findById("wnd[0]/tbar[0]/okcd").Text = tcode  #"/nS_ALR_87011990"
     session.findById("wnd[0]").sendVKey(0)
     session.findById("wnd[0]/usr/radXEINZEL").Select()
-    session.findById("wnd[0]/usr/ctxtBUKRS-LOW").Text = "cn10"
+    session.findById("wnd[0]/usr/ctxtBUKRS-LOW").Text = company #"cn10"
     session.findById("wnd[0]/usr/ctxtBEREICH1").Text = "60"
-    session.findById("wnd[0]/usr/ctxtSRTVR").Text = "0002"
+    session.findById("wnd[0]/usr/ctxtSRTVR").Text = sort_variant #"0002"
     session.findById("wnd[0]/tbar[1]/btn[8]").press()
     session.findById("wnd[0]/mbar/menu[0]/menu[1]/menu[1]").Select()
     #session.findById("wnd[1]/usr/radRB_1").Select()
@@ -28,8 +34,16 @@ def execute_transaction(session, tcode, company, sort_variant, conn, cursor):
     session.findById("wnd[1]/tbar[0]/btn[0]").press()    
     fullname = os.path.join(path ,filename)    
     
-    # upload to db        
-    wbk = load_workbook(fullname)    
+    # upload to db
+    i = 30
+    while i > 0:
+        wbk = get_workbook(fullname)
+        if wbk:            
+            break
+        else:            
+            i -= 1            
+            time.sleep(1)    
+       
     sht= wbk.active  
     last_row = sht.max_row
     total_records_updated = last_row - 1
