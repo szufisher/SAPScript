@@ -77,14 +77,7 @@ def execute_transaction(session, cursor, order_lines):
         
 def get_from_db(cursor):
     # dateadd(day,datediff(day,10,GETDATE()),0)
-    sql = """SELECT distinct A.WO, A.OpStep, A.PN,A.SN, C.last_step FROM IdsTlg53_ApsRoutingStart AS A 
-        inner join Mis03Routing as D on A.PN = D.Pn            
-        inner join (select r.Pn, max(r.OpStep) as last_step from Mis03Routing as r group by r.Pn) as C on A.PN = C.Pn
-        left join IdsTlg52_ApsPoSnSta AS E on A.WO = E.PO and A.SN = E.SN 
-        left join Mis12RoutingSta AS B ON (A.OpStep = B.OpStep) AND (A.SN = B.SN) AND (A.WO = B.WO) and  (B.SapSta = 'Closed')             
-        where A.Status ='Complete' and len(A.SN) = 4 and A.FinishTime>='2019-08-14' and D.SapConfirm = 1 and 
-        ((A.OpStep <> C.last_step) or (A.OpStep = C.last_step and E.PO is not null))
-        and (B.WO is null ) order by A.OpStep"""    
+    sql = """SELECT """    
     cursor.execute(sql)    
     result = cursor.fetchall()
     return result
@@ -92,7 +85,7 @@ def get_from_db(cursor):
 def update_to_db(cursor, wo, operation,sn, status, message, operation_des):
     print('%s,%s,%s,%s,%s' %(wo,sn, operation, status, message))
     logger.info('%s,%s,%s,%s,%s' %(wo,sn, operation, status, message))
-    cursor.execute("""insert into Mis12RoutingSta(WO, SN, OpStep, SapSta, SapStaRemark, SapStaTime, OpDes )
+    cursor.execute("""insert into 
                     values(?, ?, ?, ?, ?, ?, ?)""", (wo,sn,operation, status, message, datetime.now(), operation_des))
     return cursor.rowcount
 
