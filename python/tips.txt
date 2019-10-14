@@ -1,0 +1,14 @@
+error:
+session.FindbyId().text=""
+self._oldobj_.Invoke    =>wine2com\client\dynamic.py line 559 in __setattr__
+pywintypes.com_error：（-2147352562，’Invalid number of parameters',None, None)
+
+reason:
+installed version for pypiwin32 and pywin32 do not match,
+
+run pip freeze to check the installed module's version shows pypiwin version 223, while pywin32 shows version 225
+
+solution:
+pip uninstall pywin32
+pip install pywin32==223
+
