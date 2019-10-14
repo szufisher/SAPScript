@@ -12,3 +12,11 @@ solution:
 pip uninstall pywin32
 pip install pywin32==223
 
+pip install failed with error timeout
+
+reason:
+computer is behind proxy server
+
+solution:
+put pip.ini under c:\user\appdata\roaming\pip folder
+
