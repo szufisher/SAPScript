@@ -84,6 +84,8 @@ for page in PDFPage.create_pages(document):
 	# The device renders the layout from interpreter
 	layout = device.get_result()
 	# Out of the many LT objects within layout, we are interested in LTTextBox and LTTextLine
+	print(lt_obj.__class__.__name__)
+        print(lt_obj.bbox)
 	for lt_obj in layout:
 		if isinstance(lt_obj, LTTextBox) or isinstance(lt_obj, LTTextLine):
 			extracted_text += lt_obj.get_text()
