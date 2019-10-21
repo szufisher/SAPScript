@@ -92,8 +92,12 @@ def execute_transaction(session, tcode, company, sort_variant, conn, cursor):
     close_db(conn)
     wbk.close()
     
-    xl = win32com.client.GetObject(Class='Excel.application')
-    xl.quit()
+    try:
+        xl = win32com.client.GetObject(Class='Excel.Application')
+        xl.Quit()
+    except Exception, e:
+        print('Failed Exit Running Excel Application with error %' % str(e))
+            
     return total_records_updated
     
 
