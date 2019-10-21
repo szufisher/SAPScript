@@ -27,7 +27,7 @@ def main():
         #print('assetname=%s' % assetname)
         if not os.path.exists(assetname):
             os.mkdir(assetname)
-        outfile = assetname + ".thumb.jpg"        
+        outfile = filename + ".thumb.jpg"        
         try:
             im = Image.open(infile)
             im.thumbnail(size)            
