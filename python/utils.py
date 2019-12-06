@@ -149,7 +149,7 @@ def send_email(subject, sender):
     msg = MIMEText('auto mail from interface program', 'plain')
     msg['Subject']= subject
     msg['From']   = sender 
-    server = smtplib.SMTP('139.24.192.15',25)
+    server = smtplib.SMTP('',25)
     #server.starttls()    #no authentication needed, register the IP in smtp server instead
     server.ehlo_or_helo_if_needed()
     try:
